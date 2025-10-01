@@ -1,0 +1,35 @@
+# مثال (ضعه في: /etc/nginx/sites-available/ai-summary ثم اربطه بـ sites-enabled)
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name your-domain.com www.your-domain.com; # عدّل هنا
+
+    # ملفات الواجهة الأمامية (Vue build)
+    root /var/www/ai-summary;
+    index index.html;
+
+    # منع كشف الملفات الحساسة
+    location ~* \.(env|py|sh|service)$ { deny all; }
+
+    # تمرير API إلى الباك إند FastAPI
+    location /health { proxy_pass http://127.0.0.1:9000/health; include /etc/nginx/proxy_params; proxy_buffering off; }
+    location /models { proxy_pass http://127.0.0.1:9000/models; include /etc/nginx/proxy_params; proxy_buffering off; }
+    location /upload { proxy_pass http://127.0.0.1:9000/upload; include /etc/nginx/proxy_params; proxy_buffering off; }
+    location /stream { proxy_pass http://127.0.0.1:9000/stream; include /etc/nginx/proxy_params; proxy_buffering off; }
+    location /session { proxy_pass http://127.0.0.1:9000/session; include /etc/nginx/proxy_params; proxy_buffering off; }
+
+    # تفعيل SSE بشكل صحيح: تعطيل buffering
+    proxy_set_header Connection '';
+    proxy_http_version 1.1;
+    chunked_transfer_encoding off;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # SPA fallback (Vue Router history) – إن أضفته مستقبلاً
+    location / { try_files $uri $uri/ /index.html; }
+}
+
+# بعد إصدار شهادة SSL سيولّد Certbot كتلة server جديدة على 443 تلقائياً.

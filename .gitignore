@@ -1,0 +1,49 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+
+# Virtual env
+venv/
+ENV/
+.venv/
+
+# Env files
+.env
+*.env
+
+# Upload temp PDFs
+back-end/temp/
+back-end/temp/*.pdf
+
+# Cache / tooling
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# ---- Node / Frontend ----
+front-end/node_modules/
+front-end/dist/
+front-end/.vite/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Coverage
+coverage/
+*.lcov
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Misc
+*.bak
+*.tmp
