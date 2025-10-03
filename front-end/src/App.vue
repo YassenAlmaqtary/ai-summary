@@ -61,7 +61,8 @@
         </header>
         <transition name="fade">
           <div v-show="!collapseSummary" class="summary-scroll">
-            <Summary :summary="summary" />
+             <Summary :summary="summary" />
+            <!-- <MarkdownRenderer :source="summary" /> -->
           </div>
         </transition>
       </aside>
@@ -75,12 +76,14 @@
 <script>
 import FileUpload from './components/FileUpload.vue'
 import Summary from './components/Summary.vue'
+// import MarkdownRenderer from './components/MarkdownRenderer.vue'
 import Toast from './components/Toast.vue'
 import { EventSourcePolyfill } from 'event-source-polyfill';
 window.EventSourcePolyfill = EventSourcePolyfill
 
 export default {
   components: { FileUpload, Summary, Toast },
+  // components: { FileUpload, MarkdownRenderer, Toast },
   data() {
     return {
       file: null,
@@ -162,10 +165,7 @@ export default {
         const es = new EventSource(url);
         this._es = es;
         es.onmessage = (event) => {
-          const t = event.data
-            .replace(/\s+([،؛,.!?])/g,'$1')
-            .replace(/([،؛,.!?])(\S)/g,'$1 $2');
-          this.summary += t;
+          this.summary += event.data;
         };
         es.addEventListener('status', (e)=>{
           if(e.data === 'DONE') {
