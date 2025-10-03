@@ -7,7 +7,6 @@
 """
 
 # ============== الإستيرادات الأساسية ==============
-import os  # قد يُستخدم مستقبلاً في التعامل مع متغيرات البيئة
 import uuid  # لإنشاء معرفات فريدة للجلسات والملفات المؤقتة
 import time  # لحساب فترات إنتهاء الصلاحية (TTL)
 import asyncio  # لتنفيذ عمليات الإدخال/الإخراج بشكل غير متزامن
@@ -20,12 +19,11 @@ from fastapi import FastAPI, UploadFile, HTTPException, Query  # FastAPI لبن�
 from fastapi.responses import StreamingResponse, JSONResponse  # للرد ببث SSE أو JSON عادي
 from fastapi.middleware.cors import CORSMiddleware  # للسماح للواجهة الأمامية بالوصول من دومينات مختلفة
 
-from ai.ollama import stream_summary  # الدالة التي تتولى بث التلخيص من نموذج Ollama
-from uploads.config import MAX_PDF_SIZE, DEFAULT_MODEL, OLLAMA_MODELS  # الإعدادات العامة من ملف التهيئة
+## تم الاستغناء عن Ollama، الربط الآن مع Gemini فقط
+from uploads.config import MAX_PDF_SIZE, DEFAULT_MODEL, gemini_models,OLLAMA_MODELS,client  # الإعدادات العامة من ملف التهيئة
 
 # ============== إنشاء تطبيق FastAPI ==============
 app = FastAPI(title="AI PDF Summarizer API", version="1.1.0")
-
 # حدث تشغيل مبدئي للتسخين (Warmup) لتسريع أول استجابة
 @app.on_event("startup")
 async def _warmup():
@@ -143,58 +141,10 @@ async def upload_pdf(file: UploadFile):
     _cleanup_old_files()  # تنظيف الملفات القديمة بشكل دوري
     return {"session_id": session_id, "characters": len(text)}  # إرجاع عدد المحارف للمعلومة
 
-async def _sse_generator(text: str, model: str | None) -> AsyncGenerator[bytes, None]:
-    """مولِّد (Generator) يبث التلخيص بآلية Server-Sent Events.
 
-    آلية العمل:
-    1. يُحسب مفتاح تجزئة يعتمد على النص + النموذج لتفادي إعادة الحساب.
-    2. إذا وُجد تلخيص مخزون ضمن فترة TTL يُعاد مباشرة (CACHE_HIT).
-    3. خلاف ذلك يتم استدعاء النموذج وإرسال الرموز (Tokens) تدريجياً للواجهة.
-    4. بعد الانتهاء يُخزن التلخيص النهائي في الذاكرة للتسريع مستقبلاً.
-    """
-    model_key = model or DEFAULT_MODEL  # استخدام النموذج الافتراضي إن لم يُحدد
-    # نصنع مفتاحاً فريداً يعتمد على: النموذج + طول النص + قيمة hash الديناميكية للنص
-    cache_key = hashlib.sha256(f"{model_key}:full:{len(text)}:{hash(text)}".encode()).hexdigest()
-    now = time.time()
-    cached = summary_cache.get(cache_key)
-    if cached and now - cached[0] < CACHE_TTL:
-        # إبلاغ الواجهة أن النتيجة من الكاش ثم بث التلخيص النهائي دفعة واحدة
-        yield b"event: status\ndata: CACHE_HIT\n\n"
-        yield f"data: {cached[1]}\n\n".encode("utf-8")
-        yield b"event: status\ndata: DONE\n\n"
-        return
-    collected: list[str] = []  # لتجميع التوكنات لإعادة بناء النص النهائي وتنظيفه
-    async for chunk in stream_summary(text, model=model_key):  # تدفق الرموز من النموذج
-        if chunk.startswith("data: "):
-            token = chunk[6:].rstrip("\n")  # إزالة بادئة data: و نهاية السطر
-            collected.append(token)
-        yield chunk.encode("utf-8")  # بث نفس القطعة للمتصفح كما هي
-    if collected:
-        raw = "".join(collected)  # دمج التوكنات كما وصلت
-        import re  # استخدام التعبيرات النمطية للتنظيف
-        text_norm = re.sub(r"\s+", " ", raw).strip()  # تقليص المسافات المتكررة
-        text_norm = re.sub(r"\*{2,}", "**", text_norm)  # دمج النجوم المكررة
-        text_norm = re.sub(r"\s+([،؛,.!?])", r"\1", text_norm)  # إزالة مسافة قبل علامات الترقيم
-        text_norm = re.sub(r"([،؛,.!?])(\S)", r"\1 \2", text_norm)  # ضمان مسافة بعد الترقيم
-        if text_norm:
-            summary_cache[cache_key] = (time.time(), text_norm)  # تخزين التلخيص في الكاش
 
-@app.get("/stream/{session_id}")
-async def stream(session_id: str, model: str | None = Query(default=None, description="Override model")):
-    """بث التلخيص الخاص بجلسة معينة باستخدام SSE.
 
-    - تتلقى الواجهة الأمامية معرف الجلسة من /upload ثم تنشئ اتصال SSE.
-    - يمكن اختيار نموذج مختلف عبر بارامتر الاستعلام model.
-    - يتم إرسال التوكنات فور وصولها من النموذج لتجربة تفاعلية.
-    """
-    text = text_storage.get(session_id)
-    if text is None:
-        raise HTTPException(status_code=404, detail="Session not found")  # جلسة غير موجودة
-    headers = {
-        "Cache-Control": "no-cache",  # منع التخزين المؤقت الوسيط
-        "X-Accel-Buffering": "no",  # لتعطيل Buffering في Nginx إن وُجد
-    }
-    return StreamingResponse(_sse_generator(text, model), media_type="text/event-stream", headers=headers)
+# تم إلغاء نقطة /stream القديمة. استخدم /summarize-gemini فقط.
 
 @app.get("/health")
 async def health():
@@ -204,7 +154,7 @@ async def health():
 @app.get("/models")
 async def models():
     """إرجاع النموذج الافتراضي وقائمة النماذج المدعومة للاختيار من الواجهة."""
-    return {"default": DEFAULT_MODEL, "models": OLLAMA_MODELS}
+    return {"default": DEFAULT_MODEL, "models":gemini_models}
 
 @app.delete("/session/{session_id}")
 async def delete_session(session_id: str):
@@ -220,3 +170,42 @@ async def delete_session(session_id: str):
 #     if not text:
 #         return {"error": "الملف فارغ أو لم يتم استخراج النص"}
 #     return StreamingResponse(stream_summary(text), media_type="text/event-stream")
+
+
+@app.get("/summarize-gemini")
+async def summarize_gemini(session_id: str = Query(...), model: str | None = None, language: str = Query("العربية")):
+    model_key = model or DEFAULT_MODEL
+    text = text_storage.get(session_id)
+    if not text:
+        raise HTTPException(status_code=404, detail="الجلسة غير موجودة أو انتهت صلاحيتها")
+    prompt = (
+        f"أنت مساعد أكاديمي متخصص في تبسيط الدروس للطلاب."
+        f"\n- استقبل الدرس التالي من الطالب، ثم استخرج الأفكار الرئيسية والمفاهيم الأساسية فقط."
+        f"\n- لخص كل فكرة رئيسية في نقطة منفصلة، واشرحها بلغة أكاديمية مبسطة وسهلة الفهم للطالب."
+        f"\n- استخدم النقاط المرتبة وغير المرتبة (bullet points) لتوضيح كل فكرة أو مفهوم."
+        f"\n- قدم أمثلة عملية أو توضيحية إن أمكن لكل نقطة."
+        f"\n- لا تعيد النص الأصلي أو تنسخه، بل أعد صياغة المعلومات بأسلوبك الأكاديمي."
+        f"\n- الهدف: أن يفهم الطالب الدرس بعمق ويستطيع مراجعة الأفكار بسرعة."
+        f"\n- استخدم تنسيق Markdown إن أمكن لجعل التلخيص منظم وواضح."
+        f"\n\nالدرس:\n{text}"
+    )
+    def sse_gen():
+        yield b"event: status\ndata: START\n\n"
+        try:
+            stream = client.models.generate_content_stream(
+                model=model_key,
+                contents=[prompt]
+            )
+            for chunk in stream:
+                token = getattr(chunk, "text", None)
+                if token:
+                    yield f"data: {token}\n\n".encode("utf-8")
+            yield b"event: status\ndata: DONE\n\n"
+        except Exception as e:
+            yield f"event: error\ndata: {str(e)}\n\n".encode("utf-8")
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(sse_gen(), media_type="text/event-stream", headers=headers)
+  

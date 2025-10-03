@@ -76,6 +76,8 @@
 import FileUpload from './components/FileUpload.vue'
 import Summary from './components/Summary.vue'
 import Toast from './components/Toast.vue'
+import { EventSourcePolyfill } from 'event-source-polyfill';
+window.EventSourcePolyfill = EventSourcePolyfill
 
 export default {
   components: { FileUpload, Summary, Toast },
@@ -148,13 +150,15 @@ export default {
       if (this._timer) clearInterval(this._timer)
       this._timer = setInterval(() => { this.elapsed++ }, 1000)
       try {
-        const formData = new FormData()
-        formData.append('file', this.file)
+        // 1. ارفع الملف أولاً
+        const formData = new FormData();
+        formData.append('file', this.file);
         const res = await fetch('http://localhost:9000/upload', { method: 'POST', body: formData });
         if(!res.ok) throw new Error('فشل رفع الملف')
         const data = await res.json();
         const sessionId = data.session_id;
-  const url = `http://localhost:9000/stream/${sessionId}?model=${encodeURIComponent(this.model)}`
+        // 2. افتح EventSource على /summarize-gemini
+        const url = `http://localhost:9000/summarize-gemini?session_id=${encodeURIComponent(sessionId)}&model=${encodeURIComponent(this.model)}`;
         const es = new EventSource(url);
         this._es = es;
         es.onmessage = (event) => {
