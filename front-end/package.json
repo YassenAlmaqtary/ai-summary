@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "event-source-polyfill": "^1.0.31",
     "vue": "^3.5.18"
   },
   "devDependencies": {
