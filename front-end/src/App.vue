@@ -6,7 +6,7 @@
         <img class="logo" src="https://cdn-icons-png.flaticon.com/512/337/337946.png" alt="logo" />
         <div class="brand-text">
           <h1>ملخِّص الدروس</h1>
-          <span class="tagline">رفع سريع • تلخيص ذكي • عربية واضحة</span>
+          <span class="tagline">رف  ع سريع • تلخيص ذكي • عربية واضحة</span>
         </div>
       </div>
       <div class="top-actions">
@@ -61,8 +61,8 @@
         </header>
         <transition name="fade">
           <div v-show="!collapseSummary" class="summary-scroll">
-             <Summary :summary="summary" />
-            <!-- <MarkdownRenderer :source="summary" /> -->
+             <!-- <Summary :summary="summary" /> -->
+            <MarkdownRenderer :source="summary" />
           </div>
         </transition>
       </aside>
@@ -76,14 +76,13 @@
 <script>
 import FileUpload from './components/FileUpload.vue'
 import Summary from './components/Summary.vue'
-// import MarkdownRenderer from './components/MarkdownRenderer.vue'
+import MarkdownRenderer from './components/MarkdownRenderer.vue'
 import Toast from './components/Toast.vue'
-import { EventSourcePolyfill } from 'event-source-polyfill';
-window.EventSourcePolyfill = EventSourcePolyfill
+
 
 export default {
-  components: { FileUpload, Summary, Toast },
-  // components: { FileUpload, MarkdownRenderer, Toast },
+  // components: { FileUpload, Summary, Toast },
+   components: { FileUpload, MarkdownRenderer, Toast },
   data() {
     return {
       file: null,
