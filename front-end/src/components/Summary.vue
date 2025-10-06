@@ -1,3 +1,4 @@
+Summary.vue@ -1,108 +0,0 @@
 <!-- <template>
   <div v-if="summary" class="mt-6 p-4 border rounded bg-gray-50">
     <h2 class="font-semibold mb-2">📌 الملخص:</h2>
@@ -105,4 +106,3 @@ export default {
   .inline-actions button { background:#334155; }
  }
 </style>
-

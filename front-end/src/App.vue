@@ -6,7 +6,7 @@
         <img class="logo" src="https://cdn-icons-png.flaticon.com/512/337/337946.png" alt="logo" />
         <div class="brand-text">
           <h1>ملخِّص الدروس</h1>
-          <span class="tagline">رفع سريع • تلخيص ذكي • عربية واضحة</span>
+          <span class="tagline">رف  ع سريع • تلخيص ذكي • عربية واضحة</span>
         </div>
       </div>
       <div class="top-actions">
@@ -61,7 +61,8 @@
         </header>
         <transition name="fade">
           <div v-show="!collapseSummary" class="summary-scroll">
-            <Summary :summary="summary" />
+             <!-- <Summary :summary="summary" /> -->
+            <MarkdownRenderer :source="summary" />
           </div>
         </transition>
       </aside>
@@ -75,12 +76,15 @@
 <script>
 import FileUpload from './components/FileUpload.vue'
 import Summary from './components/Summary.vue'
+import MarkdownRenderer from './components/MarkdownRenderer.vue'
 import Toast from './components/Toast.vue'
 import { EventSourcePolyfill } from 'event-source-polyfill';
 window.EventSourcePolyfill = EventSourcePolyfill
 
+
 export default {
-  components: { FileUpload, Summary, Toast },
+  // components: { FileUpload, Summary, Toast },
+   components: { FileUpload, MarkdownRenderer, Toast },
   data() {
     return {
       file: null,
@@ -153,19 +157,24 @@ export default {
         // 1. ارفع الملف أولاً
         const formData = new FormData();
         formData.append('file', this.file);
+<<<<<<< HEAD
         const res = await fetch('http://localhost:9000/upload', { method: 'POST', body: formData });
+=======
+        const res = await fetch('https://ai-service.deliciousdemo.site/upload', { method: 'POST', body: formData });
+>>>>>>> main
         if(!res.ok) throw new Error('فشل رفع الملف')
         const data = await res.json();
         const sessionId = data.session_id;
         // 2. افتح EventSource على /summarize-gemini
+<<<<<<< HEAD
         const url = `http://localhost:9000/summarize-gemini?session_id=${encodeURIComponent(sessionId)}&model=${encodeURIComponent(this.model)}`;
+=======
+        const url = `https://ai-service.deliciousdemo.site/summarize-gemini?session_id=${encodeURIComponent(sessionId)}&model=${encodeURIComponent(this.model)}`;
+>>>>>>> main
         const es = new EventSource(url);
         this._es = es;
         es.onmessage = (event) => {
-          const t = event.data
-            .replace(/\s+([،؛,.!?])/g,'$1')
-            .replace(/([،؛,.!?])(\S)/g,'$1 $2');
-          this.summary += t;
+          this.summary += event.data;
         };
         es.addEventListener('status', (e)=>{
           if(e.data === 'DONE') {
