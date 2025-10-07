@@ -74,6 +74,7 @@
 </template>
 
 <script>
+import { API_BASE_URL } from './config.js'
 import FileUpload from './components/FileUpload.vue'
 import Summary from './components/Summary.vue'
 import MarkdownRenderer from './components/MarkdownRenderer.vue'
@@ -103,6 +104,7 @@ export default {
       theme:'light'
       ,layoutMode:'side'
       ,showUploadPanel:true
+      ,apiBaseUrl: API_BASE_URL
     }
   },
   computed:{
@@ -122,7 +124,7 @@ export default {
   methods: {
     async loadModels(){
       try {
-        const res = await fetch('http://localhost:9000/models');
+        const res = await fetch(`${this.apiBaseUrl}/models`);
         if(!res.ok) return;
         const data = await res.json();
         this.models = data.models || [];
@@ -155,12 +157,12 @@ export default {
         // 1. ارفع الملف أولاً
         const formData = new FormData();
         formData.append('file', this.file);
-        const res = await fetch('https://ai-service.deliciousdemo.site/upload', { method: 'POST', body: formData });
+  const res = await fetch(`${this.apiBaseUrl}/upload`, { method: 'POST', body: formData });
         if(!res.ok) throw new Error('فشل رفع الملف')
         const data = await res.json();
         const sessionId = data.session_id;
         // 2. افتح EventSource على /summarize-gemini
-        const url = `https://ai-service.deliciousdemo.site/summarize-gemini?session_id=${encodeURIComponent(sessionId)}&model=${encodeURIComponent(this.model)}`;
+  const url = `${this.apiBaseUrl}/summarize-gemini?session_id=${encodeURIComponent(sessionId)}&model=${encodeURIComponent(this.model)}`;
         const es = new EventSource(url);
         this._es = es;
         es.onmessage = (event) => {
@@ -293,17 +295,127 @@ export default {
     .upload-panel{display:flex;flex-direction:column;gap:1.4rem;}
 
     /* ========== لوحة الملخّص ========== */
-  .summary-panel{display:flex;flex-direction:column;gap:1rem;max-height:calc(100dvh - 9rem);position:sticky;top:6.2rem;align-self:start;}
-  .layout.with-summary .summary-panel{max-width:420px;}
+  .summary-panel{
+    display:flex;
+    flex-direction:column;
+    gap:1rem;
+    max-height:calc(100dvh - 9rem);
+    position:sticky;
+    top:6.2rem;
+    align-self:start;
+    width:100%;
+    min-width:0;
+    max-width:unset;
+    flex:1 1 0;
+  }
+  .layout.with-summary .summary-panel{
+    max-width:100%;
+    min-width:0;
+    flex:1 1 0;
+  }
+  .layout.with-summary.mode-side .summary-panel{
+    max-width:700px;
+  }
+  .layout.with-summary.mode-stack .summary-panel{
+    max-width:900px;
+  }
+  .layout.with-summary.mode-focus .summary-panel{
+    max-width:700px;
+  }
     .panel-head{display:flex;align-items:center;justify-content:space-between;margin:-.3rem 0 .2rem;}
     .panel-head h2{margin:0;font-size:1.05rem;font-weight:700;letter-spacing:.5px;}
     .panel-head-actions{display:flex;align-items:center;gap:.4rem;}
     .icon-btn{background:var(--c-surface-alt);border:1px solid var(--c-border);padding:.45rem .6rem;border-radius:10px;cursor:pointer;transition:var(--transition);font-size:.85rem;}
     .icon-btn:hover{background:rgba(var(--c-accent-rgb)/.15)}
+
     .summary-scroll{max-height:520px;overflow:auto;padding:.4rem .2rem .6rem;}
-  .summary-panel .summary-scroll{max-height:100%;padding-inline-start:.2rem;}
+    .summary-panel .summary-scroll{max-height:100%;padding-inline-start:.2rem;}
     .summary-scroll::-webkit-scrollbar{width:6px;}
     .summary-scroll::-webkit-scrollbar-thumb{background:rgba(var(--c-accent-rgb)/.4);border-radius:10px;}
+
+    /* تحسين مظهر وتجاوب نص الملخص المنسق */
+    .markdown-content {
+      font-size: 1rem;
+      line-height: 1.8;
+      color: var(--c-text);
+      word-break: break-word;
+      direction: rtl;
+      text-align: start;
+      padding: 0.5rem 0.2rem;
+    }
+    .markdown-content h1,
+    .markdown-content h2,
+    .markdown-content h3,
+    .markdown-content h4 {
+      font-weight: 700;
+      margin-top: 1.2em;
+      margin-bottom: 0.7em;
+      color: var(--c-text);
+      word-break: break-word;
+    }
+    .markdown-content h1 { font-size: 1.4em; }
+    .markdown-content h2 { font-size: 1.2em; border-bottom: 1px solid var(--c-border); padding-bottom: .2em; }
+    .markdown-content h3 { font-size: 1.1em; }
+    .markdown-content p {
+      margin-bottom: 1em;
+      word-break: break-word;
+    }
+    .markdown-content strong {
+      font-weight: 700;
+    }
+    .markdown-content ul,
+    .markdown-content ol {
+      padding-right: 1.5rem;
+      margin-bottom: 1em;
+      word-break: break-word;
+    }
+    .markdown-content li {
+      margin-bottom: 0.5em;
+      word-break: break-word;
+    }
+    .markdown-content code {
+      background-color: rgba(var(--c-accent-rgb), 0.1);
+      padding: 0.2em 0.4em;
+      border-radius: 6px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.95em;
+    }
+    .markdown-content pre {
+      background-color: var(--c-surface-alt);
+      border: 1px solid var(--c-border);
+      padding: 1rem;
+      border-radius: var(--radius-m);
+      overflow-x: auto;
+      font-size: 0.95em;
+    }
+    .markdown-content pre code {
+      background: none;
+      padding: 0;
+    }
+    .markdown-content blockquote {
+      border-right: 4px solid var(--c-accent);
+      padding-right: 1rem;
+      margin-right: 0;
+      color: var(--c-text-soft);
+      font-size: 0.98em;
+    }
+    @media (max-width: 640px) {
+      .markdown-content {
+        font-size: 0.92rem;
+        padding: 0.2rem 0.1rem;
+      }
+      .markdown-content h1 { font-size: 1.15em; }
+      .markdown-content h2 { font-size: 1.05em; }
+      .markdown-content h3 { font-size: 1em; }
+      .markdown-content ul,
+      .markdown-content ol {
+        padding-right: 0.7rem;
+      }
+      .markdown-content pre {
+        font-size: 0.85em;
+        padding: 0.5rem;
+      }
+    }
 
     /* ========== الأزرار العامة ========== */
     button{font-family:inherit;}
