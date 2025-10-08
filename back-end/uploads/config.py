@@ -18,12 +18,12 @@ MAX_PDF_SIZE = int(os.getenv("MAX_PDF_SIZE", str(15 * 1024 * 1024)))
 client = genai.Client(api_key=Gemnikey)
 
 # Frontend origins allowed for CORS (comma-separated)
-FRONTEND_ORIGINS = [
-	o.strip() for o in os.getenv(
-		"FRONTEND_ORIGINS",
-		"http://localhost:5173,https://summary-ai.deliciousdemo.site"
-	).split(",") if o.strip()
-]
+# FRONTEND_ORIGINS = [
+# 	o.strip() for o in os.getenv(
+# 		"FRONTEND_ORIGINS",
+# 		"http://localhost:5173,https://summary-ai.deliciousdemo.site"
+# 	).split(",") if o.strip()
+# ]
 
 # Optional: allow origin regex (useful for subdomains), leave empty to disable
 ALLOW_ORIGIN_REGEX = os.getenv("ALLOW_ORIGIN_REGEX", "")

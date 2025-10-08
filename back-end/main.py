@@ -143,8 +143,25 @@ async def upload_pdf(file: UploadFile):
 
     pdf_path = UPLOAD_DIR / f"{uuid.uuid4()}.pdf"  # اسم فريد للملف المؤقت
     # كتابة الملف على القرص باستخدام منفذ (Executor) لتجنب حظر الحدث الرئيسي
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, pdf_path.write_bytes, data)
+    
+   # ============= عزل أخطاء الكتابة (السبب المحتمل للخطأ 500) =============
+    try:
+        # كتابة الملف على القرص باستخدام منفذ (Executor)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, pdf_path.write_bytes, data)
+    except PermissionError:
+        # خطأ أذونات واضحة
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Server error: Permission denied to save file. Check server user permissions on {UPLOAD_DIR} directory."
+        )
+    except Exception as e:
+        # خطأ I/O عام (مثل مسار غير موجود)
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Server I/O error during file save: {type(e).__name__}."
+        )
+    # ======================================================================
 
     try:
         text = extract_text_from_pdf(pdf_path)
