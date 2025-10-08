@@ -20,7 +20,15 @@ from fastapi.responses import StreamingResponse, JSONResponse  # للرد ببث
 from fastapi.middleware.cors import CORSMiddleware  # للسماح للواجهة الأمامية بالوصول من دومينات مختلفة
 
 ## تم الاستغناء عن Ollama، الربط الآن مع Gemini فقط
-from uploads.config import MAX_PDF_SIZE, DEFAULT_MODEL, gemini_models,OLLAMA_MODELS,client  # الإعدادات العامة من ملف التهيئة
+from uploads.config import (
+    MAX_PDF_SIZE,
+    DEFAULT_MODEL,
+    gemini_models,
+    OLLAMA_MODELS,
+    client,
+    FRONTEND_ORIGINS,
+    ALLOW_ORIGIN_REGEX,
+)
 
 # ============== إنشاء تطبيق FastAPI ==============
 app = FastAPI(title="AI PDF Summarizer API", version="1.1.0")
@@ -30,15 +38,24 @@ async def _warmup():
     """Warmup model with a tiny request to reduce first-token latency."""
     sample_text = "اختبار تمهيدي صغير"  # very short
     try:
-        # consume a few tokens then break
-        gen = stream_summary(sample_text, model=DEFAULT_MODEL, add_status=False)
-        count = 0
-        async for chunk in gen:
-            if chunk.startswith("data: "):
-                count += 1
-            if count > 3:
-                break
+        # run sync streaming in executor to avoid blocking event loop
+        def _do_warmup():
+            stream = client.models.generate_content_stream(
+                model=DEFAULT_MODEL,
+                contents=[sample_text]
+            )
+            # consume a couple of chunks then stop
+            taken = 0
+            for chunk in stream:
+                if getattr(chunk, "text", None):
+                    taken += 1
+                if taken >= 2:
+                    break
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _do_warmup)
     except Exception:
+        # ignore warmup errors
         pass
     
 # ============== هياكل التخزين داخل الذاكرة ==============
@@ -67,10 +84,8 @@ def _cleanup_old_files() -> None:
 # ============== إعداد CORS للسماح لتطبيق الواجهة الأمامية بالاتصال ==============
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vue أثناء التطوير
-        "https://summary-ai.deliciousdemo.site",  # موقعك الفعلي
-    ],
+    allow_origins=FRONTEND_ORIGINS,
+    allow_origin_regex=ALLOW_ORIGIN_REGEX or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
