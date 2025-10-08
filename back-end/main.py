@@ -146,6 +146,7 @@ async def upload_pdf(file: UploadFile):
     
    # ============= عزل أخطاء الكتابة (السبب المحتمل للخطأ 500) =============
     try:
+        
         pdf_path = UPLOAD_DIR / f"{uuid.uuid4()}.pdf"
         # كتابة الملف على القرص باستخدام منفذ (Executor)
         # loop = asyncio.get_running_loop()
