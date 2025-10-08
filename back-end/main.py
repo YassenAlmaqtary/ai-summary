@@ -141,16 +141,14 @@ async def upload_pdf(file: UploadFile):
     if len(data) > MAX_PDF_SIZE:
         raise HTTPException(status_code=413, detail="File too large.")  # الملف أكبر من الحد المسموح
 
-     # اسم فريد للملف المؤقت
+    pdf_path = UPLOAD_DIR / f"{uuid.uuid4()}.pdf"  # اسم فريد للملف المؤقت
     # كتابة الملف على القرص باستخدام منفذ (Executor) لتجنب حظر الحدث الرئيسي
     
    # ============= عزل أخطاء الكتابة (السبب المحتمل للخطأ 500) =============
     try:
-        
-        pdf_path = UPLOAD_DIR / f"{uuid.uuid4()}.pdf"
         # كتابة الملف على القرص باستخدام منفذ (Executor)
-        # loop = asyncio.get_running_loop()
-        # await loop.run_in_executor(None, pdf_path.write_bytes, data)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, pdf_path.write_bytes, data)
     except PermissionError:
         # خطأ أذونات واضحة
         raise HTTPException(
