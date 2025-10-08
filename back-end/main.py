@@ -67,9 +67,12 @@ def _cleanup_old_files() -> None:
 # ============== إعداد CORS للسماح لتطبيق الواجهة الأمامية بالاتصال ==============
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # يمكن تقييد النطاقات في بيئة الإنتاج
+    allow_origins=[
+        "http://localhost:5173",  # Vue أثناء التطوير
+        "https://summary-ai.deliciousdemo.site",  # موقعك الفعلي
+    ],
     allow_credentials=True,
-    allow_methods=["*"],  # السماح بكل أنواع الطلبات (GET/POST/DELETE...)
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
