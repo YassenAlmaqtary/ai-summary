@@ -163,10 +163,20 @@ async def upload_pdf(file: UploadFile):
         )
     # ======================================================================
 
+    # استخراج النص ثم حذف الملف المؤقت من القرص بأي حال
+    exc = None
     try:
         text = extract_text_from_pdf(pdf_path)
     except Exception as e:  # فشل في التحليل أو القراءة
-        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {e}")
+        exc = e
+    finally:
+        try:
+            pdf_path.unlink(missing_ok=True)  # حذف الملف المؤقت
+        except Exception:
+            pass  # نتجاهل أخطاء الحذف
+
+    if exc is not None:
+        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {exc}")
 
     if not text.strip():  # ملف فارغ أو لا يحتوي نص مستخرج
         raise HTTPException(status_code=422, detail="No extractable text found in PDF.")
