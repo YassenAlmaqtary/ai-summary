@@ -6,7 +6,7 @@
         <img class="logo" src="https://cdn-icons-png.flaticon.com/512/337/337946.png" alt="logo" />
         <div class="brand-text">
           <h1>ملخِّص الدروس</h1>
-          <span class="tagline">رف  ع سريع • تلخيص ذكي • عربية واضحة</span>
+          <span class="tagline">رفع سريع • تلخيص ذكي • عربية واضحة</span>
         </div>
       </div>
       <div class="top-actions">
@@ -119,7 +119,20 @@ export default {
   mounted(){
     this.theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light'
     document.documentElement.dataset.theme = this.theme
+    // اضبط وضع التخطيط تلقائياً للجوال ليكون متراكم (stack)
+    const applyResponsiveMode = () => {
+      const w = window.innerWidth
+      if (w <= 900) {
+        this.layoutMode = 'stack'
+      }
+    }
+    applyResponsiveMode()
+    window.addEventListener('resize', applyResponsiveMode)
+    this._onResize = applyResponsiveMode
     this.loadModels();
+  },
+  beforeUnmount(){
+    if(this._onResize) window.removeEventListener('resize', this._onResize)
   },
   methods: {
     async loadModels(){
@@ -255,25 +268,26 @@ export default {
     *,*::before,*::after{box-sizing:border-box;}
     html,body,#app,.app-root{margin:0;padding:0;min-height:100%;font-family:'Cairo',system-ui,sans-serif;}
     body{background:var(--bg-gradient);background-attachment:fixed;color:var(--c-text);}
+  img, video{max-width:100%;height:auto;}
 
     /* ========== الشريط العلوي ========== */
-    .topbar{display:flex;align-items:center;justify-content:space-between;padding:0.9rem 1.4rem;margin:clamp(.6rem,1.2vh,1.2rem) auto 0;max-width:1180px;background:var(--c-surface);backdrop-filter:blur(8px);border:1px solid var(--c-border);border-radius:var(--radius-m);box-shadow:var(--shadow-soft);}
-    .brand{display:flex;align-items:center;gap:.85rem;}
+    .topbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem .9rem;padding:0.9rem 1.4rem;margin:clamp(.6rem,1.2vh,1.2rem) auto 0;max-width:1180px;background:var(--c-surface);backdrop-filter:blur(8px);border:1px solid var(--c-border);border-radius:var(--radius-m);box-shadow:var(--shadow-soft);}
+    .brand{display:flex;align-items:center;gap:.85rem;min-width:0;}
     .logo{width:54px;height:54px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(0,0,0,.15));}
-  .brand-text h1{font-size:1.55rem;margin:0;font-weight:800;letter-spacing:-.5px;background:linear-gradient(90deg,#4338ca,#2563eb,#0ea5e9);background-clip:text;-webkit-background-clip:text;color:transparent;}
+  .brand-text h1{font-size:clamp(1.1rem,2.2vw,1.55rem);margin:0;font-weight:800;letter-spacing:-.5px;background:linear-gradient(90deg,#4338ca,#2563eb,#0ea5e9);background-clip:text;-webkit-background-clip:text;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw;}
     .tagline{font-size:.7rem;color:var(--c-text-soft);font-weight:500;display:block;margin-top:2px;letter-spacing:.5px}
-  .top-actions{display:flex;align-items:center;gap:.6rem;}
+  .top-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
   .layout-modes{display:flex;align-items:center;gap:.25rem;background:var(--c-surface-alt);padding:.25rem .45rem;border:1px solid var(--c-border);border-radius:12px;}
   .layout-modes button{background:transparent;border:none;cursor:pointer;font-size:.85rem;padding:.35rem .45rem;border-radius:8px;transition:var(--transition);}
   .layout-modes button.active,.layout-modes button:hover{background:rgba(var(--c-accent-rgb)/.15)}
-    .model-select{padding:.55rem .9rem;border:1px solid var(--c-border);border-radius:12px;background:var(--c-surface-alt);font-family:inherit;font-size:.9rem;cursor:pointer;min-width:140px;}
+    .model-select{padding:.55rem .9rem;border:1px solid var(--c-border);border-radius:12px;background:var(--c-surface-alt);font-family:inherit;font-size:.9rem;cursor:pointer;min-width:140px;max-width:100%;}
     .model-select:focus{outline:none;box-shadow:var(--shadow-focus);}
     .ghost{background:var(--c-surface-alt);border:1px solid var(--c-border);padding:.55rem .9rem;border-radius:12px;cursor:pointer;font-size:1rem;transition:var(--transition);}
     .ghost:hover{background:rgba(var(--c-accent-rgb)/.1)}
 
     /* ========== تخطيط المحتوى ========== */
   /* الشبكة: افتراضي عمود واحد، وعند وجود ملخص تصبح عمودين */
-  .layout{max-width:1180px;margin:1.2rem auto 2rem;display:grid;grid-template-columns:1fr;gap:1.4rem;align-items:start;padding:0 1rem;justify-items:center;}
+  .layout{max-width:1180px;margin:1.2rem auto 2rem;display:grid;grid-template-columns:1fr;gap:1.4rem;align-items:start;padding:0 1rem;justify-items:stretch;width:100%;}
   .layout.with-summary.mode-side{grid-template-columns:minmax(0,440px) minmax(0,1fr);justify-items:stretch;}
   .layout.with-summary.mode-stack{grid-template-columns:1fr;}
   .layout.with-summary.mode-focus{grid-template-columns:minmax(0,340px) 1fr;}
@@ -328,7 +342,7 @@ export default {
     .icon-btn{background:var(--c-surface-alt);border:1px solid var(--c-border);padding:.45rem .6rem;border-radius:10px;cursor:pointer;transition:var(--transition);font-size:.85rem;}
     .icon-btn:hover{background:rgba(var(--c-accent-rgb)/.15)}
 
-    .summary-scroll{max-height:520px;overflow:auto;padding:.4rem .2rem .6rem;}
+  .summary-scroll{max-height:520px;overflow:auto;padding:.4rem .2rem .6rem;}
     .summary-panel .summary-scroll{max-height:100%;padding-inline-start:.2rem;}
     .summary-scroll::-webkit-scrollbar{width:6px;}
     .summary-scroll::-webkit-scrollbar-thumb{background:rgba(var(--c-accent-rgb)/.4);border-radius:10px;}
@@ -399,7 +413,7 @@ export default {
       color: var(--c-text-soft);
       font-size: 0.98em;
     }
-    @media (max-width: 640px) {
+    @media (max-width:640px) {
       .markdown-content {
         font-size: 0.92rem;
         padding: 0.2rem 0.1rem;
@@ -451,11 +465,23 @@ export default {
     .fade-enter-active,.fade-leave-active{transition:opacity .25s ease;}
     .fade-enter-from,.fade-leave-to{opacity:0;}
 
-    @media (max-width:640px){
+    @media (max-width:900px){
       .topbar{padding:.75rem 1rem;}
-      .brand-text h1{font-size:1.25rem;}
-      .panel{padding:1.5rem 1.2rem 1.9rem;}
-      .layout{padding:0 .5rem;margin-top:.8rem;}
-      .summary-scroll{max-height:420px;}
-  }
+      .brand-text h1{max-width:50vw;}
+      .top-actions{width:100%;justify-content:space-between}
+      .model-select{flex:1 1 220px}
+    }
+    @media (max-width:640px){
+      .panel{padding:1.1rem .9rem 1.4rem;border-radius:18px}
+      .layout{padding:0 .6rem;margin-top:.7rem;}
+      /* عطل التثبيت لجعل التمرير طبيعي على الجوال */
+      .summary-panel{position:static;top:auto;max-height:unset}
+      .summary-scroll{max-height:unset}
+      .layout.with-summary.mode-side{grid-template-columns:1fr}
+      .layout.with-summary.mode-focus{grid-template-columns:1fr}
+      .actions-row{flex-direction:column;align-items:stretch}
+      .primary,.danger,.soft{width:100%;text-align:center}
+      .panel-title{font-size:1.05rem}
+      .hint{font-size:.7rem}
+    }
 </style>
