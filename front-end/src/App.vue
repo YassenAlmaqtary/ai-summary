@@ -210,9 +210,6 @@ export default {
       this._timer = setInterval(() => {
         this.elapsed++
       }, 1000)
-      this.$nextTick(() => {
-        this.scrollToSummary()
-      })
 
       try {
         const formData = new FormData()
@@ -896,11 +893,11 @@ button {
   }
 
   .sidebar {
-    order: 2;
+    order: 1;
   }
 
   .conversation {
-    order: 1;
+    order: 2;
   }
 }
 
