@@ -40,14 +40,16 @@ export default {
 </script>
 
 <style scoped>
-.uploader { width:100%; border:2px dashed #6366f1; border-radius:18px; padding:28px 22px; background:#ffffff; text-align:center; position:relative; transition:.25s border-color,.25s background; cursor:pointer; }
-.uploader.dragging { background:#eef2ff; border-color:#4f46e5; }
+.uploader { width:100%; border:2px dashed var(--accent); border-radius:18px; padding:28px 22px; background:var(--surface-alt); text-align:center; position:relative; transition:.25s border-color,.25s background,.25s transform; cursor:pointer; }
+.uploader:hover { transform:translateY(-1px); }
+.uploader.dragging { background:rgba(var(--accent-rgb),0.15); border-color:var(--accent); }
 .label { display:flex; flex-direction:column; gap:10px; align-items:center; outline:none; }
-.icon { font-size:2.6rem; filter: drop-shadow(0 2px 6px rgba(0,0,0,.15)); }
-.texts strong { font-size:1.05rem; color:#1f2937; }
-.texts small { display:block; margin-top:4px; color:#6b7280; font-size:.73rem; }
-.choose-btn { margin-top:8px; background:#4f46e5; color:#fff; border:none; padding:8px 18px; border-radius:8px; font-size:.85rem; cursor:pointer; box-shadow:0 4px 14px rgba(79,70,229,.3); }
-.choose-btn:focus-visible, .uploader:focus-visible { outline:3px solid #6366f1; outline-offset:4px; }
+.icon { font-size:2.6rem; filter: drop-shadow(0 2px 6px rgba(0,0,0,.12)); }
+.texts strong { font-size:1.05rem; color:var(--text); }
+.texts small { display:block; margin-top:4px; color:var(--text-soft); font-size:.73rem; }
+.choose-btn { margin-top:8px; background:var(--accent); color:#fff; border:none; padding:8px 18px; border-radius:10px; font-size:.85rem; cursor:pointer; box-shadow:0 4px 16px rgba(var(--accent-rgb),.3); transition:.25s transform,.25s box-shadow; }
+.choose-btn:hover { transform:translateY(-1px); box-shadow:0 6px 18px rgba(var(--accent-rgb),.28); }
+.choose-btn:focus-visible, .uploader:focus-visible { outline:3px solid rgba(var(--accent-rgb),.35); outline-offset:4px; }
 @media (max-width:640px){
   .uploader{ padding:18px 14px; }
   .icon{ font-size:2.2rem; }

@@ -1,74 +1,125 @@
 <template>
-  <div class="app-root" dir="rtl" :data-theme="theme">
-    <!-- شريط علوي -->
-    <header class="topbar">
+  <div class="app-shell" dir="rtl" :data-theme="theme">
+    <nav class="top-nav">
       <div class="brand">
-        <img class="logo" src="https://cdn-icons-png.flaticon.com/512/337/337946.png" alt="logo" />
-        <div class="brand-text">
-          <h1>ملخِّص الدروس</h1>
-          <span class="tagline">رفع سريع • تلخيص ذكي • عربية واضحة</span>
+        <div class="brand-mark">🎓</div>
+        <div class="brand-copy">
+          <h1>رفيق الملخصات</h1>
+          <p>ذكاء اصطناعي يساعدك على فهم الدروس بسرعة</p>
         </div>
       </div>
-      <div class="top-actions">
-        <select v-model="model" class="model-select" :disabled="loading">
-          <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-        </select>
-        <div class="layout-modes" role="group" aria-label="اختيار نمط العرض">
-          <button :class="{'active': layoutMode==='side'}" @click="layoutMode='side'" title="وضع جانبي">🪟</button>
-          <button :class="{'active': layoutMode==='stack'}" @click="layoutMode='stack'" title="وضع متراكم">🧱</button>
-          <button :class="{'active': layoutMode==='focus'}" @click="layoutMode='focus'" title="وضع تركيز">🎯</button>
+      <div class="nav-actions">
+        <div class="model-picker">
+          <label for="model-select">نموذج الذكاء</label>
+          <select id="model-select" v-model="model" :disabled="loading || models.length === 0">
+            <option v-if="models.length === 0" disabled>جاري التحميل...</option>
+            <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+          </select>
         </div>
-        <button class="ghost" @click="toggleTheme" :title="isDark ? 'وضع فاتح' : 'وضع داكن'">{{ isDark ? '☀️' : '🌙' }}</button>
+        <button class="theme-toggle" @click="toggleTheme" :title="isDark ? 'وضع فاتح' : 'وضع داكن'">
+          {{ isDark ? '☀️' : '🌙' }}
+        </button>
       </div>
-    </header>
+    </nav>
 
-    <!-- شبكة المحتوى -->
-    <div class="layout" :class="layoutClasses">
-      <!-- لوحة الرفع والإجراءات -->
-      <section v-if="showUploadPanel" class="panel upload-panel" :class="{'floating-focus': layoutMode==='focus' && summary}">
-        <h2 class="panel-title">📄 ارفع ملف PDF</h2>
-        <p class="hint">اسحب الملف أو اضغط للاختيار (يدعم العربية حتى 15MB)</p>
-        <FileUpload @file-selected="setFile" />
-        <div class="actions-row">
-          <button class="primary" :disabled="!file || loading" @click="summarize">
-            <span v-if="!loading">🚀 تلخيص الآن</span>
-            <span v-else>⏳ جاري التلخيص {{ formatElapsed(elapsed) }}</span>
-          </button>
-          <button v-if="loading" class="danger" @click="cancel">إلغاء</button>
-          <button v-if="summary && !loading" class="soft" @click="reset">تفريغ</button>
-        </div>
-        <div v-if="summary && !loading" class="after-actions">
-          <button @click="copySummary" class="mini">نسخ</button>
-          <button @click="downloadSummary" class="mini">تنزيل</button>
-        </div>
-        <p v-if="error" class="error-box">{{ error }}</p>
-        <div v-if="loading" class="live-indicator">
-          <span class="dot"></span>
-          <span>يبث التلخيص...</span>
-        </div>
-      </section>
+    <main class="workspace">
+      <aside class="sidebar">
+        <section class="card hero-card">
+          <h2>مرحباً بالطلاب</h2>
+          <p>ارفع مذكراتك أو ملفات PDF وسنعود إليك بملخص منظم يسهل مراجعته قبل الاختبارات.</p>
+          <ul class="hero-list">
+            <li>ملخصات مركزة مع نقاط رئيسية</li>
+            <li>اقتراحات للمراجعة والتذكر</li>
+            <li>واجهة على غرار المحادثة لتتبع أفكارك</li>
+          </ul>
+        </section>
 
-      <!-- لوحة الملخص (قابلة للطي) -->
-      <aside class="panel summary-panel" v-if="summary" :class="{'collapsed-focus': layoutMode==='focus' && !showUploadPanel}">
-        <header class="panel-head">
-          <h2>📑 الملخص</h2>
-          <div class="panel-head-actions">
-            <button @click="copySummary" title="نسخ" class="icon-btn">📋</button>
-            <button @click="downloadSummary" title="تنزيل" class="icon-btn">⬇️</button>
-            <button v-if="layoutMode!=='focus'" @click="collapseSummary = !collapseSummary" :title="collapseSummary ? 'إظهار' : 'إخفاء'" class="icon-btn">{{ collapseSummary ? '⬅️' : '➡️' }}</button>
-            <button v-else @click="toggleUploadFocus" :title="showUploadPanel ? 'إخفاء الرفع' : 'إظهار الرفع'" class="icon-btn">{{ showUploadPanel ? '📥' : '📤' }}</button>
+        <section class="card upload-card">
+          <header class="card-head">
+            <div>
+              <h3>ارفع ملفك</h3>
+              <span class="caption">يُدعم PDF حتى 15MB</span>
+            </div>
+            <span v-if="fileName" class="badge">تم اختيار ملف</span>
+          </header>
+
+          <FileUpload @file-selected="setFile" />
+
+          <div class="upload-meta">
+            <p v-if="fileName"><strong>الملف:</strong> {{ fileName }}</p>
+            <p v-if="loading"><strong>الوقت:</strong> {{ formatElapsed(elapsed) }}</p>
+            <p v-if="summary && !loading"><strong>آخر تحديث:</strong> تم إنشاء ملخص جديد</p>
+          </div>
+
+          <div class="upload-actions">
+            <button class="primary" :disabled="!file || loading" @click="summarize">
+              <span v-if="!loading">ابدأ التلخيص</span>
+              <span v-else>جاري التلخيص...</span>
+            </button>
+            <button v-if="loading" class="ghost danger" @click="cancel">إيقاف</button>
+            <button v-if="summary && !loading" class="ghost" @click="reset">بدء جلسة جديدة</button>
+          </div>
+
+          <div class="status-row" v-if="loading">
+            <span class="pulse"></span>
+            <span>نقوم بتحليل الملف وإعداد ملخص مناسب لك...</span>
+          </div>
+
+          <p v-if="error" class="error-box">{{ error }}</p>
+        </section>
+
+        <section class="card tips-card">
+          <h3>نصائح للاستفادة</h3>
+          <ul>
+            <li>قسّم المواد الطويلة إلى أقسام، وارفع ملفاً لكل فصل.</li>
+            <li>جرّب أكثر من نموذج لترى أيها يفهم أسلوبك بشكل أفضل.</li>
+            <li>انسخ الملخص وأضف ملاحظاتك عليه داخل دفتر الدراسة.</li>
+          </ul>
+        </section>
+      </aside>
+
+      <section class="conversation">
+        <header class="conversation-head">
+          <div class="head-copy">
+            <span class="subtitle">مساحة الملخص</span>
+            <h2>محادثة المُلخِّص الذكي</h2>
+          </div>
+          <div class="head-actions">
+            <button class="icon-btn" :disabled="!summary" @click="copySummary" title="نسخ">
+              📋
+            </button>
+            <button class="icon-btn" :disabled="!summary" @click="downloadSummary" title="تنزيل">
+              ⬇️
+            </button>
           </div>
         </header>
-        <transition name="fade">
-          <div v-show="!collapseSummary" class="summary-scroll">
-             <!-- <Summary :summary="summary" /> -->
-            <MarkdownRenderer :source="summary" />
-          </div>
-        </transition>
-      </aside>
-    </div>
 
-    <footer class="site-footer">© {{ year }} جميع الحقوق محفوظة • مشروع تعليمي</footer>
+        <div class="chat-area">
+          <article v-if="summary" class="assistant-message">
+            <div class="message-meta">
+              <span class="role-chip">المُلخِّص</span>
+              <span class="model-chip">{{ model || 'نموذج' }}</span>
+            </div>
+            <div class="message-bubble">
+              <MarkdownRenderer :source="summary" />
+            </div>
+          </article>
+
+          <div v-else class="empty-state">
+            <div class="empty-icon">💡</div>
+            <h3>ابدأ أول تلخيص لك</h3>
+            <p>ارفع ملف درس أو محاضرة، واختر النموذج، ثم اضغط على زر التلخيص. سنُظهر النتيجة هنا على هيئة رسالة دردشة سهلة القراءة.</p>
+            <div class="steps">
+              <span>1. اختر ملف PDF تعليمي.</span>
+              <span>2. اضغط على "ابدأ التلخيص".</span>
+              <span>3. تابع النقاط المهمة، ودوّن ملاحظاتك.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">© {{ year }} مشروع تعليمي لأي طالب • تم التطوير بحب</footer>
     <Toast :show="showToast" :message="toastMessage" :type="toastType" @close="showToast=false" />
   </div>
 </template>
@@ -76,14 +127,11 @@
 <script>
 import { API_BASE_URL } from './config.js'
 import FileUpload from './components/FileUpload.vue'
-import Summary from './components/Summary.vue'
 import MarkdownRenderer from './components/MarkdownRenderer.vue'
 import Toast from './components/Toast.vue'
 
-
 export default {
-  // components: { FileUpload, Summary, Toast },
-   components: { FileUpload, MarkdownRenderer, Toast },
+  components: { FileUpload, MarkdownRenderer, Toast },
   data() {
     return {
       file: null,
@@ -94,70 +142,62 @@ export default {
       elapsed: 0,
       _timer: null,
       _es: null,
-      showToast:false,
-      toastType:'info',
-      toastMessage:'',
-      _toastTimer:null,
-      model:'',
-      models:[],
-      collapseSummary:false,
-      theme:'light'
-      ,layoutMode:'side'
-      ,showUploadPanel:true
-      ,apiBaseUrl: API_BASE_URL
+      showToast: false,
+      toastType: 'info',
+      toastMessage: '',
+      _toastTimer: null,
+      model: '',
+      models: [],
+      theme: 'light',
+      apiBaseUrl: API_BASE_URL
     }
   },
-  computed:{
-    isDark(){ return this.theme==='dark' },
-    layoutClasses(){
-      return [
-        this.summary ? 'with-summary' : '',
-        `mode-${this.layoutMode}`
-      ]
+  computed: {
+    isDark() {
+      return this.theme === 'dark'
+    },
+    fileName() {
+      return this.file ? this.file.name : ''
     }
   },
-  mounted(){
-    this.theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light'
+  mounted() {
+    this.theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
     document.documentElement.dataset.theme = this.theme
-    // اضبط وضع التخطيط تلقائياً للجوال ليكون متراكم (stack)
-    const applyResponsiveMode = () => {
-      const w = window.innerWidth
-      if (w <= 900) {
-        this.layoutMode = 'stack'
-      }
-    }
-    applyResponsiveMode()
-    window.addEventListener('resize', applyResponsiveMode)
-    this._onResize = applyResponsiveMode
-    this.loadModels();
+    this.loadModels()
   },
-  beforeUnmount(){
-    if(this._onResize) window.removeEventListener('resize', this._onResize)
+  beforeUnmount() {
+    this._clearTimer()
+    this._closeES()
   },
   methods: {
-    async loadModels(){
+    async loadModels() {
       try {
-        const res = await fetch(`${this.apiBaseUrl}/models`);
-        if(!res.ok) return;
-        const data = await res.json();
-        this.models = data.models || [];
-        this.model = data.default || this.models[0] || '';
-      } catch(e){ /* ignore */ }
+        const res = await fetch(`${this.apiBaseUrl}/models`)
+        if (!res.ok) return
+        const data = await res.json()
+        this.models = data.models || []
+        this.model = data.default || this.models[0] || ''
+      } catch (e) {
+        // ignore
+      }
     },
-    setFile(f){ this.file = f },
-    toggleTheme(){
-      this.theme = this.isDark ? 'light':'dark'
+    setFile(file) {
+      this.file = file
+    },
+    toggleTheme() {
+      const nextTheme = this.isDark ? 'light' : 'dark'
+      this.theme = nextTheme
       document.documentElement.dataset.theme = this.theme
-      this.notify(this.isDark ? 'تم تفعيل الوضع الفاتح' : 'تم تفعيل الوضع الداكن','success')
+      this.notify(nextTheme === 'dark' ? 'تم تفعيل الوضع الداكن' : 'تم تفعيل الوضع الفاتح', 'success')
     },
-    formatElapsed(s) {
-      const m = Math.floor(s / 60).toString().padStart(2, '0')
-      const ss = (s % 60).toString().padStart(2, '0')
-      return `${m}:${ss}`
+    formatElapsed(seconds) {
+      const minutes = Math.floor(seconds / 60).toString().padStart(2, '0')
+      const remainder = (seconds % 60).toString().padStart(2, '0')
+      return `${minutes}:${remainder}`
     },
     async summarize() {
       if (!this.file) {
-        this.notify('⚠️ اختر ملف PDF أولاً!','error')
+        this.notify('⚠️ اختر ملف PDF أولاً!', 'error')
         return
       }
       this.summary = ''
@@ -165,323 +205,757 @@ export default {
       this.loading = true
       this.elapsed = 0
       if (this._timer) clearInterval(this._timer)
-      this._timer = setInterval(() => { this.elapsed++ }, 1000)
+      this._timer = setInterval(() => {
+        this.elapsed++
+      }, 1000)
+
       try {
-        // 1. ارفع الملف أولاً
-        const formData = new FormData();
-        formData.append('file', this.file);
-  const res = await fetch(`${this.apiBaseUrl}/upload`, { method: 'POST', body: formData });
-        if(!res.ok) throw new Error('فشل رفع الملف')
-        const data = await res.json();
-        const sessionId = data.session_id;
-        // 2. افتح EventSource على /summarize-gemini
-  const url = `${this.apiBaseUrl}/summarize-gemini?session_id=${encodeURIComponent(sessionId)}&model=${encodeURIComponent(this.model)}`;
-        const es = new EventSource(url);
-        this._es = es;
-        es.onmessage = (event) => {
-          this.summary += event.data;
-        };
-        es.addEventListener('status', (e)=>{
-          if(e.data === 'DONE') {
-            this.loading = false;
-            this._closeES();
-            this.notify('اكتمل التلخيص','success')
+        const formData = new FormData()
+        formData.append('file', this.file)
+        const res = await fetch(`${this.apiBaseUrl}/upload`, { method: 'POST', body: formData })
+        if (!res.ok) throw new Error('فشل رفع الملف')
+        const data = await res.json()
+        const sessionId = data.session_id
+
+        const url = `${this.apiBaseUrl}/summarize-gemini?session_id=${encodeURIComponent(sessionId)}&model=${encodeURIComponent(this.model)}`
+        const es = new EventSource(url)
+        this._es = es
+
+        es.onmessage = event => {
+          this.summary += event.data
+        }
+
+        es.addEventListener('status', event => {
+          if (event.data === 'DONE') {
+            this.loading = false
+            this._closeES()
+            this._clearTimer()
+            this.notify('اكتمل التلخيص', 'success')
           }
-        });
-        es.addEventListener('error', ()=>{
-          this.loading = false;
-          this._closeES();
-          this.notify('تعذر إكمال التلخيص','error')
-        });
-      } catch (e) {
-        this.notify(e.message,'error')
+        })
+
+        es.addEventListener('error', () => {
+          this.loading = false
+          this._closeES()
+          this._clearTimer()
+          this.notify('تعذر إكمال التلخيص', 'error')
+        })
+      } catch (error) {
+        this.loading = false
+        this._clearTimer()
+        this.notify(error.message || 'تعذر رفع الملف', 'error')
       } finally {
-        if (!this.loading && this._timer) { clearInterval(this._timer); this._timer = null }
+        if (!this.loading && this._timer) {
+          this._clearTimer()
+        }
       }
     },
-    cancel(){
-      this.loading = false;
-      this._closeES();
-      if (this._timer) { clearInterval(this._timer); this._timer = null }
+    cancel() {
+      this.loading = false
+      this._closeES()
+      this._clearTimer()
     },
-    _closeES(){ if(this._es){ this._es.close(); this._es=null } },
-    copySummary(){ navigator.clipboard.writeText(this.summary); this.notify('تم النسخ','success') },
-    downloadSummary(){
-      const blob = new Blob([this.summary], {type:'text/plain;charset=utf-8'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'summary.txt';
-      a.click();
-      URL.revokeObjectURL(a.href);
-      this.notify('تم التنزيل','success')
+    _closeES() {
+      if (this._es) {
+        this._es.close()
+        this._es = null
+      }
     },
-    reset(){ this.summary=''; this.error=''; this.file=null; this.collapseSummary=false; this.notify('تم التفريغ','success') },
-    toggleUploadFocus(){
-      if(this.layoutMode!=='focus') return;
-      this.showUploadPanel = !this.showUploadPanel;
+    _clearTimer() {
+      if (this._timer) {
+        clearInterval(this._timer)
+        this._timer = null
+      }
     },
-    notify(msg,type='info'){
-      this.toastMessage = msg;
-      if(type==='error') this.error = msg; else this.error='';
-      this.toastType=type; this.showToast=true;
-      clearTimeout(this._toastTimer);
-      this._toastTimer=setTimeout(()=>{ this.showToast=false },4000)
+    copySummary() {
+      if (!this.summary) return
+      navigator.clipboard.writeText(this.summary)
+      this.notify('تم النسخ', 'success')
+    },
+    downloadSummary() {
+      if (!this.summary) return
+      const blob = new Blob([this.summary], { type: 'text/plain;charset=utf-8' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = 'summary.txt'
+      link.click()
+      URL.revokeObjectURL(link.href)
+      this.notify('تم التنزيل', 'success')
+    },
+    reset() {
+      this.summary = ''
+      this.error = ''
+      this.file = null
+      this.notify('تم بدء جلسة جديدة', 'success')
+    },
+    notify(message, type = 'info') {
+      this.toastMessage = message
+      this.toastType = type
+      this.showToast = true
+      if (type === 'error') {
+        this.error = message
+      } else {
+        this.error = ''
+      }
+      clearTimeout(this._toastTimer)
+      this._toastTimer = setTimeout(() => {
+        this.showToast = false
+      }, 4000)
     }
   }
 }
 </script>
 
 <style>
-/* ========== المتغيرات (سمة خفيفة) ========== */
 :root {
-      --bg-gradient: linear-gradient(130deg,#5b21b6,#2563eb 55%,#0ea5e9);
-      --c-bg: #f8fafc;
-      --c-surface: #ffffffcc;
-      --c-surface-alt:#ffffffee;
-      --c-border:#e2e8f0;
-      --c-text:#1e293b;
-      --c-text-soft:#475569;
-      --c-accent:#6366f1;
-      --c-accent-rgb:99 102 241;
-      --c-danger:#dc2626;
-      --radius-l:26px;
-      --radius-m:16px;
-      --shadow-soft:0 4px 16px rgba(15,23,42,.08),0 2px 6px rgba(0,0,0,.05);
-      --shadow-focus:0 0 0 3px rgba(99,102,241,.35);
-      --transition: .18s cubic-bezier(.4,.2,.2,1);
-    }
-    [data-theme='dark'] {
-      --bg-gradient: linear-gradient(120deg,#0f172a,#312e81 55%,#1e3a8a);
-      --c-bg:#0f172a;
-      --c-surface:#1e293bcc;
-      --c-surface-alt:#1e293bee;
-      --c-border:#334155;
-      --c-text:#f1f5f9;
-      --c-text-soft:#94a3b8;
-      --c-accent:#818cf8;
-      --c-accent-rgb:129 140 248;
-      --c-danger:#f87171;
-      --shadow-soft:0 4px 18px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.35);
-    }
+  --bg: #eef3ff;
+  --surface: #ffffff;
+  --surface-alt: #f3f6ff;
+  --border: #d6def5;
+  --text: #1f2534;
+  --text-soft: #5c6580;
+  --accent: #2563eb;
+  --accent-rgb: 37 99 235;
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.14);
+  --danger-border: rgba(220, 38, 38, 0.35);
+  --shadow: 0 28px 50px rgba(15, 23, 42, 0.12);
+  --radius-lg: 28px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --transition: 0.2s ease;
+}
 
-    /* ========== إعادة ضبط بسيطة ========== */
-    *,*::before,*::after{box-sizing:border-box;}
-    html,body,#app,.app-root{margin:0;padding:0;min-height:100%;font-family:'Cairo',system-ui,sans-serif;}
-    body{background:var(--bg-gradient);background-attachment:fixed;color:var(--c-text);}
-  img, video{max-width:100%;height:auto;}
+[data-theme='dark'] {
+  --bg: #0f172a;
+  --surface: #111827;
+  --surface-alt: #1f2937;
+  --border: #273245;
+  --text: #f1f5f9;
+  --text-soft: #9aa2b6;
+  --accent: #60a5fa;
+  --accent-rgb: 96 165 250;
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.18);
+  --danger-border: rgba(248, 113, 113, 0.35);
+  --shadow: 0 28px 60px rgba(15, 23, 42, 0.45);
+}
 
-    /* ========== الشريط العلوي ========== */
-    .topbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.6rem .9rem;padding:0.9rem 1.4rem;margin:clamp(.6rem,1.2vh,1.2rem) auto 0;max-width:1180px;background:var(--c-surface);backdrop-filter:blur(8px);border:1px solid var(--c-border);border-radius:var(--radius-m);box-shadow:var(--shadow-soft);}
-    .brand{display:flex;align-items:center;gap:.85rem;min-width:0;}
-    .logo{width:54px;height:54px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(0,0,0,.15));}
-  .brand-text h1{font-size:clamp(1.1rem,2.2vw,1.55rem);margin:0;font-weight:800;letter-spacing:-.5px;background:linear-gradient(90deg,#4338ca,#2563eb,#0ea5e9);background-clip:text;-webkit-background-clip:text;color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw;}
-    .tagline{font-size:.7rem;color:var(--c-text-soft);font-weight:500;display:block;margin-top:2px;letter-spacing:.5px}
-  .top-actions{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
-  .layout-modes{display:flex;align-items:center;gap:.25rem;background:var(--c-surface-alt);padding:.25rem .45rem;border:1px solid var(--c-border);border-radius:12px;}
-  .layout-modes button{background:transparent;border:none;cursor:pointer;font-size:.85rem;padding:.35rem .45rem;border-radius:8px;transition:var(--transition);}
-  .layout-modes button.active,.layout-modes button:hover{background:rgba(var(--c-accent-rgb)/.15)}
-    .model-select{padding:.55rem .9rem;border:1px solid var(--c-border);border-radius:12px;background:var(--c-surface-alt);font-family:inherit;font-size:.9rem;cursor:pointer;min-width:140px;max-width:100%;}
-    .model-select:focus{outline:none;box-shadow:var(--shadow-focus);}
-    .ghost{background:var(--c-surface-alt);border:1px solid var(--c-border);padding:.55rem .9rem;border-radius:12px;cursor:pointer;font-size:1rem;transition:var(--transition);}
-    .ghost:hover{background:rgba(var(--c-accent-rgb)/.1)}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-    /* ========== تخطيط المحتوى ========== */
-  /* الشبكة: افتراضي عمود واحد، وعند وجود ملخص تصبح عمودين */
-  .layout{max-width:1180px;margin:1.2rem auto 2rem;display:grid;grid-template-columns:1fr;gap:1.4rem;align-items:start;padding:0 1rem;justify-items:stretch;width:100%;}
-  .layout.with-summary.mode-side{grid-template-columns:minmax(0,440px) minmax(0,1fr);justify-items:stretch;}
-  .layout.with-summary.mode-stack{grid-template-columns:1fr;}
-  .layout.with-summary.mode-focus{grid-template-columns:minmax(0,340px) 1fr;}
-  .layout:not(.with-summary){max-width:820px;}
-  .mode-stack .summary-panel{order:2;}
-  .mode-stack .upload-panel{order:1;}
-  .mode-focus .upload-panel.floating-focus{position:sticky;top:6.2rem;align-self:start;max-height:calc(100dvh - 8rem);overflow:auto;}
-  .mode-focus .summary-panel{grid-column:2/-1;}
-  .mode-focus .summary-panel.collapsed-focus{grid-column:1/-1;}
-    @media (max-width:1100px){.layout,.layout.with-summary{grid-template-columns:1fr;}}
+html,
+body,
+#app,
+.app-shell {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  font-family: 'Cairo', 'Tajawal', system-ui, sans-serif;
+  color: var(--text);
+}
 
-    /* ========== اللوحات العامة ========== */
-  .panel{background:var(--c-surface);backdrop-filter:blur(10px);border:1px solid var(--c-border);border-radius:var(--radius-l);padding:1.8rem 2rem 2.2rem;box-shadow:var(--shadow-soft);position:relative;overflow:hidden;width:100%;max-width:820px;transition:background .25s ease,border-color .25s ease;}
-  .panel:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 78% 28%,rgba(var(--c-accent-rgb)/0.10),transparent 65%);pointer-events:none;}
-    .panel-title{margin:0 0 .4rem;font-size:1.2rem;font-weight:700;}
-    .hint{margin:.1rem 0 1.1rem;font-size:.75rem;color:var(--c-text-soft);font-weight:500;letter-spacing:.3px}
+body {
+  background: linear-gradient(140deg, var(--bg), rgba(255, 255, 255, 0.6));
+  background-attachment: fixed;
+}
 
-    /* ========== لوحة الرفع ========== */
-    .upload-panel{display:flex;flex-direction:column;gap:1.4rem;}
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
 
-    /* ========== لوحة الملخّص ========== */
-  .summary-panel{
-    display:flex;
-    flex-direction:column;
-    gap:1rem;
-    max-height:calc(100dvh - 9rem);
-    position:sticky;
-    top:6.2rem;
-    align-self:start;
-    width:100%;
-    min-width:0;
-    max-width:unset;
-    flex:1 1 0;
+.app-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.top-nav {
+  width: min(1180px, 100% - 32px);
+  margin: 24px auto 0;
+  padding: 18px 26px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  background: rgba(var(--accent-rgb), 0.1);
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+}
+
+.brand-copy h1 {
+  margin: 0;
+  font-size: clamp(1.1rem, 2vw, 1.5rem);
+  font-weight: 800;
+}
+
+.brand-copy p {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.model-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+.model-picker select {
+  min-width: 200px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.model-picker select:focus {
+  outline: none;
+  border-color: rgba(var(--accent-rgb), 0.5);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.18);
+}
+
+.theme-toggle {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: var(--transition);
+}
+
+.theme-toggle:hover {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.workspace {
+  width: min(1180px, 100% - 32px);
+  margin: 32px auto 40px;
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 26px;
+  align-items: start;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+.hero-card h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.hero-card p {
+  margin: 12px 0 18px;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.hero-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.hero-list li::before {
+  content: '•';
+  margin-inline-start: 8px;
+  color: var(--accent);
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.card-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.caption {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--text-soft);
+}
+
+.badge {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.75rem;
+}
+
+.upload-meta {
+  margin: 18px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+.upload-meta strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.upload-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(var(--accent-rgb), 0.18);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.primary {
+  width: 100%;
+  background: linear-gradient(140deg, #2563eb, #4338ca);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 12px 20px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.32);
+  transition: var(--transition);
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+  background: linear-gradient(140deg, rgba(37, 99, 235, 0.45), rgba(67, 56, 202, 0.45));
+}
+
+.primary:not(:disabled):hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 18px;
+  color: var(--text);
+  transition: var(--transition);
+  width: 100%;
+  min-height: 48px;
+}
+
+.ghost:hover {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--accent);
+}
+
+.ghost.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.ghost.danger:hover {
+  background: var(--danger-soft);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+.pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.9);
+  animation: beat 1.2s infinite;
+}
+
+@keyframes beat {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
   }
-  .layout.with-summary .summary-panel{
-    max-width:100%;
-    min-width:0;
-    flex:1 1 0;
+  50% {
+    transform: scale(0.7);
+    opacity: 0.4;
   }
-  .layout.with-summary.mode-side .summary-panel{
-    max-width:700px;
+}
+
+.error-box {
+  margin-top: 16px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 0.82rem;
+}
+
+.tips-card ul {
+  padding-inline-start: 18px;
+  margin: 12px 0 0;
+  color: var(--text-soft);
+  line-height: 1.7;
+  font-size: 0.85rem;
+}
+
+.conversation {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+}
+
+.conversation-head {
+  padding: 26px 28px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.head-copy h2 {
+  margin: 6px 0 0;
+  font-size: 1.2rem;
+}
+
+.subtitle {
+  font-size: 0.75rem;
+  color: var(--text-soft);
+  letter-spacing: 0.6px;
+}
+
+.head-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon-btn:not(:disabled):hover {
+  background: rgba(var(--accent-rgb), 0.14);
+}
+
+.chat-area {
+  flex: 1 1 auto;
+  padding: 24px 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.assistant-message {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.75rem;
+}
+
+.role-chip,
+.model-chip {
+  padding: 6px 14px;
+  background: rgba(var(--accent-rgb), 0.12);
+  border-radius: 999px;
+  color: var(--accent);
+}
+
+.model-chip {
+  background: var(--surface-alt);
+  color: var(--text-soft);
+}
+
+.message-bubble {
+  background: rgba(var(--accent-rgb), 0.08);
+  border-radius: 24px;
+  padding: 22px;
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
+  backdrop-filter: blur(4px);
+}
+
+.message-bubble .markdown-content {
+  margin: 0;
+  padding: 0;
+  font-size: 0.95rem;
+  line-height: 1.8;
+}
+
+.empty-state {
+  margin: auto;
+  max-width: 420px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--text-soft);
+}
+
+.empty-icon {
+  font-size: 2.4rem;
+}
+
+.empty-state h3 {
+  margin: 0;
+  color: var(--text);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.steps span {
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  margin-top: 1.4em;
+  margin-bottom: 0.6em;
+  color: var(--text);
+}
+
+.markdown-content h1 {
+  font-size: 1.35em;
+}
+
+.markdown-content h2 {
+  font-size: 1.2em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.3em;
+}
+
+.markdown-content h3 {
+  font-size: 1.1em;
+}
+
+.markdown-content p,
+.markdown-content li {
+  color: var(--text);
+}
+
+.markdown-content blockquote {
+  border-right: 4px solid rgba(var(--accent-rgb), 0.4);
+  padding-right: 1rem;
+  margin: 0.8rem 0;
+  color: var(--text-soft);
+}
+
+.markdown-content code {
+  background: rgba(var(--accent-rgb), 0.15);
+  border-radius: 8px;
+  padding: 2px 6px;
+}
+
+.markdown-content pre {
+  background: var(--surface-alt);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.site-footer {
+  margin: 0 auto 32px;
+  width: min(1180px, 100% - 32px);
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-soft);
+  padding: 18px 0;
+}
+
+@media (max-width: 1024px) {
+  .workspace {
+    grid-template-columns: 1fr;
   }
-  .layout.with-summary.mode-stack .summary-panel{
-    max-width:900px;
+
+  .sidebar {
+    order: 2;
   }
-  .layout.with-summary.mode-focus .summary-panel{
-    max-width:700px;
+
+  .conversation {
+    order: 1;
   }
-    .panel-head{display:flex;align-items:center;justify-content:space-between;margin:-.3rem 0 .2rem;}
-    .panel-head h2{margin:0;font-size:1.05rem;font-weight:700;letter-spacing:.5px;}
-    .panel-head-actions{display:flex;align-items:center;gap:.4rem;}
-    .icon-btn{background:var(--c-surface-alt);border:1px solid var(--c-border);padding:.45rem .6rem;border-radius:10px;cursor:pointer;transition:var(--transition);font-size:.85rem;}
-    .icon-btn:hover{background:rgba(var(--c-accent-rgb)/.15)}
+}
 
-  .summary-scroll{max-height:520px;overflow:auto;padding:.4rem .2rem .6rem;}
-    .summary-panel .summary-scroll{max-height:100%;padding-inline-start:.2rem;}
-    .summary-scroll::-webkit-scrollbar{width:6px;}
-    .summary-scroll::-webkit-scrollbar-thumb{background:rgba(var(--c-accent-rgb)/.4);border-radius:10px;}
+@media (max-width: 720px) {
+  .top-nav {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
-    /* تحسين مظهر وتجاوب نص الملخص المنسق */
-    .markdown-content {
-      font-size: 1rem;
-      line-height: 1.8;
-      color: var(--c-text);
-      word-break: break-word;
-      direction: rtl;
-      text-align: start;
-      padding: 0.5rem 0.2rem;
-    }
-    .markdown-content h1,
-    .markdown-content h2,
-    .markdown-content h3,
-    .markdown-content h4 {
-      font-weight: 700;
-      margin-top: 1.2em;
-      margin-bottom: 0.7em;
-      color: var(--c-text);
-      word-break: break-word;
-    }
-    .markdown-content h1 { font-size: 1.4em; }
-    .markdown-content h2 { font-size: 1.2em; border-bottom: 1px solid var(--c-border); padding-bottom: .2em; }
-    .markdown-content h3 { font-size: 1.1em; }
-    .markdown-content p {
-      margin-bottom: 1em;
-      word-break: break-word;
-    }
-    .markdown-content strong {
-      font-weight: 700;
-    }
-    .markdown-content ul,
-    .markdown-content ol {
-      padding-right: 1.5rem;
-      margin-bottom: 1em;
-      word-break: break-word;
-    }
-    .markdown-content li {
-      margin-bottom: 0.5em;
-      word-break: break-word;
-    }
-    .markdown-content code {
-      background-color: rgba(var(--c-accent-rgb), 0.1);
-      padding: 0.2em 0.4em;
-      border-radius: 6px;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 0.95em;
-    }
-    .markdown-content pre {
-      background-color: var(--c-surface-alt);
-      border: 1px solid var(--c-border);
-      padding: 1rem;
-      border-radius: var(--radius-m);
-      overflow-x: auto;
-      font-size: 0.95em;
-    }
-    .markdown-content pre code {
-      background: none;
-      padding: 0;
-    }
-    .markdown-content blockquote {
-      border-right: 4px solid var(--c-accent);
-      padding-right: 1rem;
-      margin-right: 0;
-      color: var(--c-text-soft);
-      font-size: 0.98em;
-    }
-    @media (max-width:640px) {
-      .markdown-content {
-        font-size: 0.92rem;
-        padding: 0.2rem 0.1rem;
-      }
-      .markdown-content h1 { font-size: 1.15em; }
-      .markdown-content h2 { font-size: 1.05em; }
-      .markdown-content h3 { font-size: 1em; }
-      .markdown-content ul,
-      .markdown-content ol {
-        padding-right: 0.7rem;
-      }
-      .markdown-content pre {
-        font-size: 0.85em;
-        padding: 0.5rem;
-      }
-    }
+  .nav-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
 
-    /* ========== الأزرار العامة ========== */
-    button{font-family:inherit;}
-    .actions-row{display:flex;flex-wrap:wrap;gap:.8rem;align-items:center;}
-    .primary{background:linear-gradient(90deg,#10b981,#059669);color:#fff;border:none;padding:.85rem 1.6rem;font-size:.95rem;font-weight:600;border-radius:14px;cursor:pointer;box-shadow:0 6px 18px rgba(16,185,129,.35);transition:var(--transition);}
-    .primary:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(.4);} 
-    .primary:not(:disabled):hover{filter:brightness(1.05);transform:translateY(-2px);} 
-    .danger{background:#dc2626;color:#fff;border:none;padding:.7rem 1.2rem;border-radius:12px;font-size:.8rem;cursor:pointer;box-shadow:0 4px 12px rgba(220,38,38,.4);}
-    .danger:hover{background:#b91c1c}
-    .soft{background:var(--c-surface-alt);border:1px solid var(--c-border);padding:.7rem 1.2rem;border-radius:12px;font-size:.8rem;cursor:pointer;}
-    .soft:hover{background:rgba(var(--c-accent-rgb)/.12)}
-    .mini{background:var(--c-accent);color:#fff;border:none;padding:.45rem .9rem;border-radius:10px;font-size:.7rem;cursor:pointer;font-weight:500;}
-    .mini:hover{filter:brightness(1.06)}
+  .model-picker select {
+    width: 100%;
+  }
 
-    /* ========== التغذية الحية ========== */
-    .live-indicator{display:inline-flex;align-items:center;gap:.55rem;font-size:.75rem;color:var(--c-text-soft);font-weight:600;letter-spacing:.5px;margin-top:.4rem;}
-    .dot{width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#10b981,#047857);animation:pulse 1.1s infinite ease-in-out;box-shadow:0 0 0 4px rgba(16,185,129,.25);}
-    @keyframes pulse{50%{transform:scale(.55);box-shadow:0 0 0 2px rgba(16,185,129,.35)}}
+  .workspace {
+    margin: 24px auto 32px;
+  }
 
-    /* ========== أخطاء وتنبيهات ========== */
-    .error-box{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;padding:.65rem .9rem;font-size:.7rem;border-radius:10px;font-weight:500;}
-    [data-theme='dark'] .error-box{background:#7f1d1d;color:#fecaca;border-color:#fecaca33;}
+  .conversation-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 
-    /* ========== التذييل ========== */
-    .site-footer{text-align:center;font-size:.65rem;color:var(--c-text-soft);padding:1.4rem 0 1.6rem;margin-top:1rem;}
+  .head-actions {
+    align-self: flex-end;
+  }
 
-  /* تخصيص مظهر الملخص داخل اللوحة ليصبح بدون خلفية مزدوجة */
-  .summary-panel .summary-box{background:transparent;box-shadow:none;margin:0;padding:0;max-width:100%;}
-  .summary-panel .summary-box .summary-content{max-height:unset;padding:0;}
-  .summary-panel .summary-box .header-line{display:none;}
+  .upload-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
 
-    /* ========== انتقالات ========== */
-    .fade-enter-active,.fade-leave-active{transition:opacity .25s ease;}
-    .fade-enter-from,.fade-leave-to{opacity:0;}
+@media (max-width: 500px) {
+  .top-nav,
+  .workspace,
+  .site-footer {
+    width: calc(100% - 24px);
+  }
 
-    @media (max-width:900px){
-      .topbar{padding:.75rem 1rem;}
-      .brand-text h1{max-width:50vw;}
-      .top-actions{width:100%;justify-content:space-between}
-      .model-select{flex:1 1 220px}
-    }
-    @media (max-width:640px){
-      .panel{padding:1.1rem .9rem 1.4rem;border-radius:18px}
-      .layout{padding:0 .6rem;margin-top:.7rem;}
-      /* عطل التثبيت لجعل التمرير طبيعي على الجوال */
-      .summary-panel{position:static;top:auto;max-height:unset}
-      .summary-scroll{max-height:unset}
-      .layout.with-summary.mode-side{grid-template-columns:1fr}
-      .layout.with-summary.mode-focus{grid-template-columns:1fr}
-      .actions-row{flex-direction:column;align-items:stretch}
-      .primary,.danger,.soft{width:100%;text-align:center}
-      .panel-title{font-size:1.05rem}
-      .hint{font-size:.7rem}
-    }
+  .card {
+    border-radius: var(--radius-md);
+    padding: 20px;
+  }
+
+  .conversation {
+    border-radius: var(--radius-md);
+  }
+
+  .message-bubble {
+    border-radius: 18px;
+  }
+}
+
+@media (min-width: 900px) {
+  .upload-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .primary {
+    flex: 1 1 180px;
+    font-size: 0.95rem;
+  }
+
+  .ghost {
+    width: auto;
+    min-height: 44px;
+  }
+}
 </style>
