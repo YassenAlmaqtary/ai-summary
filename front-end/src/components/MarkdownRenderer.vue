@@ -14,7 +14,7 @@ export default {
   },
   computed: {
     renderedMarkdown() {
-        console.log('Rendering markdown:', typeof(this.source), this.source);
+        // console.log('Rendering markdown:', typeof(this.source), this.source);
       // Configure marked to handle RTL and other options if needed
     //   const renderer = new marked.Renderer();
       // Example: customize heading rendering
