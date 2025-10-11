@@ -13,18 +13,19 @@ import asyncio  # لتنفيذ عمليات الإدخال/الإخراج بشك
 import hashlib  # لإنشاء مفاتيح تجزئة (Hash) فريدة من محتوى النص
 from pathlib import Path  # للتعامل مع المسارات بشكل آمن
 from typing import AsyncGenerator  # لتحديد نوع الدوال المولِّدة غير المتزامنة
+import logging
 
 import PyPDF2  # مكتبة لاستخراج النصوص من ملفات PDF
 from fastapi import FastAPI, UploadFile, HTTPException, Query  # FastAPI لبناء واجهة الAPI
 from fastapi.responses import StreamingResponse, JSONResponse  # للرد ببث SSE أو JSON عادي
-from fastapi.middleware.cors import CORSMiddleware  # للسماح للواجهة الأمامية بالوصول من دومينات مختلفة
+from fastapi.middleware.cors import CORSMiddleware
+import pypdfium2 
 
 ## تم الاستغناء عن Ollama، الربط الآن مع Gemini فقط
 from uploads.config import (
     MAX_PDF_SIZE,
     DEFAULT_MODEL,
     gemini_models,
-    OLLAMA_MODELS,
     client,
     FRONTEND_ORIGINS,
     ALLOW_ORIGIN_REGEX,
@@ -32,6 +33,13 @@ from uploads.config import (
 
 # ============== إنشاء تطبيق FastAPI ==============
 app = FastAPI(title="AI PDF Summarizer API", version="1.1.0")
+
+# إعداد لوج بسيط مع الوقت والمستوى
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("ai-summary")
 # حدث تشغيل مبدئي للتسخين (Warmup) لتسريع أول استجابة
 @app.on_event("startup")
 async def _warmup():
@@ -63,6 +71,9 @@ text_storage: dict[str, str] = {}  # تخزين النص الخام المستخ
 summary_cache: dict[str, tuple[float, str]] = {}  # تخزين التلخيص النهائي (زمن التخزين, التلخيص)
 CACHE_TTL = 60 * 10  # مدة صلاحية التلخيص في الذاكرة (ثوانٍ) = 10 دقائق
 
+# مهام استخراج قيد التنفيذ لكل جلسة
+pending_extractions: dict[str, asyncio.Task] = {}
+
 # مجلد الملفات المؤقتة (النسخ المرفوعة من المستخدم)
 UPLOAD_DIR = Path("temp")
 UPLOAD_DIR.mkdir(exist_ok=True)  # إنشاء المجلد إن لم يكن موجوداً
@@ -81,6 +92,26 @@ def _cleanup_old_files() -> None:
             # نتجاهل الأخطاء (مثلاً عند حذف متزامن أو صلاحيات)
             pass
 
+
+async def _extract_and_store(session_id: str, pdf_path: Path) -> None:
+    """تشغيل استخراج النص في منفذ (ThreadPool) ثم تخزينه وحذف الملف المؤقت."""
+    start = time.time()
+    loop = asyncio.get_running_loop()
+    try:
+        text = await loop.run_in_executor(None, extract_text_from_pdf, pdf_path)
+        # حذف الملف المؤقت بعد الاستخراج
+        try:
+            pdf_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        text_storage[session_id] = text or ""
+        log.info("extracted text for %s in %.2fs (chars=%d)", session_id, time.time()-start, len(text or ""))
+    except Exception as e:
+        text_storage[session_id] = ""
+        log.exception("failed to extract text for %s: %s", session_id, e)
+    finally:
+        pending_extractions.pop(session_id, None)
+
 # ============== إعداد CORS للسماح لتطبيق الواجهة الأمامية بالاتصال ==============
 app.add_middleware(
     CORSMiddleware,
@@ -92,33 +123,28 @@ app.add_middleware(
 )
 
 
-# def extract_text_from_pdf(file):
-#     reader = PyPDF2.PdfReader(file.file)
-#     text = ""
-#     for page in reader.pages:
-#         if page.extract_text():
-#             text += page.extract_text() + "\n"
-#     return text.strip()
+# def extract_text_from_pdf(file_path: Path) -> str:
+#     """استخراج النص من ملف PDF صفحة بصفحة.
 
+#     ملاحظات:
+#     - PyPDF2 قد يفشل في بعض الصفحات التالفة، لذا نحاول ونتجاهل الصفحة إن فشل.
+#     - يتم دمج النصوص في سلسلة واحدة مفصولة بأسطر جديدة.
+#     - يمكن لاحقاً تحسين الأداء بتقسيم محتوى كبير إلى أجزاء للتلخيص المرحلي.
+#     """
+#     reader = PyPDF2.PdfReader(str(file_path))
+#     parts: list[str] = []  # تجميع النصوص هنا
+#     for page in reader.pages:
+#         try:
+#             page_text = page.extract_text() or ""  # قد تعيد الدالة None
+#         except Exception:  # في حالة صفحة تالفة أو خطأ داخلي
+#             page_text = ""
+#         if page_text:
+#             parts.append(page_text)
+#     return "\n".join(parts).strip()  # دمج كل الصفحات في نص واحد
 
 def extract_text_from_pdf(file_path: Path) -> str:
-    """استخراج النص من ملف PDF صفحة بصفحة.
-
-    ملاحظات:
-    - PyPDF2 قد يفشل في بعض الصفحات التالفة، لذا نحاول ونتجاهل الصفحة إن فشل.
-    - يتم دمج النصوص في سلسلة واحدة مفصولة بأسطر جديدة.
-    - يمكن لاحقاً تحسين الأداء بتقسيم محتوى كبير إلى أجزاء للتلخيص المرحلي.
-    """
-    reader = PyPDF2.PdfReader(str(file_path))
-    parts: list[str] = []  # تجميع النصوص هنا
-    for page in reader.pages:
-        try:
-            page_text = page.extract_text() or ""  # قد تعيد الدالة None
-        except Exception:  # في حالة صفحة تالفة أو خطأ داخلي
-            page_text = ""
-        if page_text:
-            parts.append(page_text)
-    return "\n".join(parts).strip()  # دمج كل الصفحات في نص واحد
+    pdf = pypdfium2.PdfDocument(file_path)
+    return "\n".join(page.get_textpage().get_text_range() for page in pdf)
 
 
 
@@ -141,50 +167,35 @@ async def upload_pdf(file: UploadFile):
     if len(data) > MAX_PDF_SIZE:
         raise HTTPException(status_code=413, detail="File too large.")  # الملف أكبر من الحد المسموح
 
-    pdf_path = UPLOAD_DIR / f"{uuid.uuid4()}.pdf"  # اسم فريد للملف المؤقت
+    # اسم فريد للملف المؤقت
+    session_id = str(uuid.uuid4())
+    pdf_path = UPLOAD_DIR / f"{session_id}.pdf"
+
     # كتابة الملف على القرص باستخدام منفذ (Executor) لتجنب حظر الحدث الرئيسي
-    
-   # ============= عزل أخطاء الكتابة (السبب المحتمل للخطأ 500) =============
     try:
-        # كتابة الملف على القرص باستخدام منفذ (Executor)
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, pdf_path.write_bytes, data)
     except PermissionError:
-        # خطأ أذونات واضحة
         raise HTTPException(
-            status_code=500, 
-            detail=f"Server error: Permission denied to save file. Check server user permissions on {UPLOAD_DIR} directory."
+            status_code=500,
+            detail=(
+                f"Server error: Permission denied to save file. "
+                f"Check server user permissions on {UPLOAD_DIR} directory."
+            ),
         )
     except Exception as e:
-        # خطأ I/O عام (مثل مسار غير موجود)
         raise HTTPException(
-            status_code=500, 
-            detail=f"Server I/O error during file save: {type(e).__name__}."
+            status_code=500,
+            detail=f"Server I/O error during file save: {type(e).__name__}.",
         )
-    # ======================================================================
 
-    # استخراج النص ثم حذف الملف المؤقت من القرص بأي حال
-    # exc = None
-    # try:
-    text = extract_text_from_pdf(pdf_path)
-    # except Exception as e:  # فشل في التحليل أو القراءة
-        # exc = e
-    # finally:
-        # try:
-            # pdf_path.unlink(missing_ok=True)  # حذف الملف المؤقت
-        # except Exception:
-            # pass  # نتجاهل أخطاء الحذف
-
-    # if exc is not None:
-        # raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {exc}")
-
-    if not text.strip():  # ملف فارغ أو لا يحتوي نص مستخرج
-        raise HTTPException(status_code=422, detail="No extractable text found in PDF.")
-
-    session_id = str(uuid.uuid4())  # إنشاء معرف جلسة فريد
-    text_storage[session_id] = text  # تخزين النص في الذاكرة
+    # بدء الاستخراج في الخلفية لتقليل زمن انتظار العميل
+    task = asyncio.create_task(_extract_and_store(session_id, pdf_path))
+    pending_extractions[session_id] = task
     _cleanup_old_files()  # تنظيف الملفات القديمة بشكل دوري
-    return {"session_id": session_id, "characters": len(text)}  # إرجاع عدد المحارف للمعلومة
+    log.info("accepted upload session=%s size=%.2fKB", session_id, len(data)/1024)
+    # نعيد session_id فوراً؛ الواجهة ستفتح SSE وسيتم الانتظار هناك إن لم يكتمل الاستخراج بعد
+    return {"session_id": session_id, "characters": 0}
 
 
 
@@ -208,22 +219,13 @@ async def delete_session(session_id: str):
     return JSONResponse({"removed": bool(removed)})
 
 
-# @app.post("/summarize/")
-# async def summarize(file: UploadFile):
-#     text = extract_text_from_pdf(file)
-#     print(text)
-#     if not text:
-#         return {"error": "الملف فارغ أو لم يتم استخراج النص"}
-#     return StreamingResponse(stream_summary(text), media_type="text/event-stream")
-
-
 @app.get("/summarize-gemini")
 async def summarize_gemini(session_id: str = Query(...), model: str | None = None, language: str = Query("العربية")):
     model_key = model or DEFAULT_MODEL
-    text = text_storage.get(session_id)
-    if not text:
-        raise HTTPException(status_code=404, detail="الجلسة غير موجودة أو انتهت صلاحيتها")
-    prompt = (
+
+    # نبني الـ prompt لاحقاً بعد التأكد من توفر النص
+    def build_prompt(text: str) -> str:
+        return (
         f"أنت خبير في تلخيص الدروس الأكاديمية. مهمتك إنشاء ملخص احترافي منظم وواضح للطالب، بتنسيق عالمي مثل المواقع التعليمية الكبرى."
         f"\n\n**التعليمات:**"
         f"\n1. استخدم تنسيق Markdown الكامل: عناوين رئيسية (`#` أو `##`)، فقرات منفصلة وواضحة، قوائم نقطية ومرقمة، إبراز الكلمات المهمة (`**bold**`)، وروابط عند الحاجة."
@@ -236,21 +238,71 @@ async def summarize_gemini(session_id: str = Query(...), model: str | None = Non
         f"\n8. اجعل الناتج النهائي منسقًا وجاهزًا للعرض مباشرة في موقع تعليمي عالمي."
         f"\n9. في نهاية الملخص، أضف قسم خاص بعنوان `## أسئلة وأجوبة`، واستخرج من الدرس 3 إلى 7 أسئلة مهمة مع إجاباتها، كل سؤال في سطر منفصل، والإجابة تحته، بتنسيق Markdown."
         f"\n\nالنص الأصلي:\n{text}"
-    )
-    def sse_gen():
-        yield b"event: status\ndata: START\n\n"
+        )
+
+    async def wait_for_text() -> str:
+        text = text_storage.get(session_id)
+        if text is not None:
+            return text
+        t = pending_extractions.get(session_id)
+        if t is None:
+            # لا يوجد نص ولا مهمة معلّقة
+            raise HTTPException(status_code=404, detail="الجلسة غير موجودة أو انتهت صلاحيتها")
+        # انتظر اكتمال الاستخراج ولكن لا نحجب الحدث الرئيسي؛ سيتم الانتظار داخل خيط البث
         try:
+            await t
+        except Exception:
+            pass
+        return text_storage.get(session_id, "")
+
+    async def sse_gen() -> AsyncGenerator[bytes, None]:
+        # بث فوري لحالة البدء
+        yield b"event: status\ndata: START\n\n"
+        # أخبر الواجهة أن الاستخراج قيد التحضير إن لم يكن النص جاهزاً
+        if session_id in pending_extractions and session_id not in text_storage:
+            yield b"event: status\ndata: EXTRACTING\n\n"
+        try:
+            text_ready = await wait_for_text()
+
+            if not (text_ready and text_ready.strip()):
+                yield b"event: error\ndata: No extractable text found in PDF.\n\n"
+                return
+
+            # التحقق من الكاش حسب تجزئة النص
+            h = hashlib.sha256(text_ready.encode("utf-8")).hexdigest()
+            now = time.time()
+            cached = summary_cache.get(h)
+            if cached and now - cached[0] < CACHE_TTL:
+                log.info("cache hit for summary h=%s", h[:8])
+                summary_text = cached[1]
+                # ابث المحتوى المخزن على دفعات ليوحي بالبث
+                step = 800
+                for i in range(0, len(summary_text), step):
+                    yield f"data: {summary_text[i:i+step]}\n\n".encode("utf-8")
+                yield b"event: status\ndata: DONE\n\n"
+                return
+
+            # لا يوجد كاش: اطلب من النموذج مع تتبع الزمن واجمع الناتج للتخزين لاحقاً
+            prompt = build_prompt(text_ready)
+            t0 = time.time()
             stream = client.models.generate_content_stream(
                 model=model_key,
                 contents=[prompt]
             )
-            print(stream)
+            buf_parts: list[str] = []
             for chunk in stream:
                 token = getattr(chunk, "text", None)
                 if token:
+                    buf_parts.append(token)
                     yield f"data: {token}\n\n".encode("utf-8")
+            full = "".join(buf_parts)
+            summary_cache[h] = (time.time(), full)
+            log.info("summary generated len=%d in %.2fs (cache key=%s)", len(full), time.time()-t0, h[:8])
             yield b"event: status\ndata: DONE\n\n"
+        except HTTPException as he:
+            yield f"event: error\ndata: {he.detail}\n\n".encode("utf-8")
         except Exception as e:
+            log.exception("sse error: %s", e)
             yield f"event: error\ndata: {str(e)}\n\n".encode("utf-8")
     headers = {
         "Cache-Control": "no-cache",
