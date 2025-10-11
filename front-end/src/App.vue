@@ -24,16 +24,6 @@
 
     <main class="workspace">
       <aside class="sidebar">
-        <section class="card hero-card">
-          <h2>مرحباً بالطلاب</h2>
-          <p>ارفع مذكراتك أو ملفات PDF وسنعود إليك بملخص منظم يسهل مراجعته قبل الاختبارات.</p>
-          <ul class="hero-list">
-            <li>ملخصات مركزة مع نقاط رئيسية</li>
-            <li>اقتراحات للمراجعة والتذكر</li>
-            <li>واجهة على غرار المحادثة لتتبع أفكارك</li>
-          </ul>
-        </section>
-
         <section class="card upload-card">
           <header class="card-head">
             <div>
@@ -68,6 +58,16 @@
           <p v-if="error" class="error-box">{{ error }}</p>
         </section>
 
+        <section class="card hero-card">
+          <h2>مرحباً بالطلاب</h2>
+          <p>ارفع مذكراتك أو ملفات PDF وسنعود إليك بملخص منظم يسهل مراجعته قبل الاختبارات.</p>
+          <ul class="hero-list">
+            <li>ملخصات مركزة مع نقاط رئيسية</li>
+            <li>اقتراحات للمراجعة والتذكر</li>
+            <li>واجهة على غرار المحادثة لتتبع أفكارك</li>
+          </ul>
+        </section>
+
         <section class="card tips-card">
           <h3>نصائح للاستفادة</h3>
           <ul>
@@ -78,7 +78,7 @@
         </section>
       </aside>
 
-      <section class="conversation">
+  <section class="conversation" ref="conversationSection">
         <header class="conversation-head">
           <div class="head-copy">
             <span class="subtitle">مساحة الملخص</span>
@@ -148,8 +148,9 @@ export default {
       _toastTimer: null,
       model: '',
       models: [],
-      theme: 'light',
-      apiBaseUrl: API_BASE_URL
+  theme: 'light',
+  apiBaseUrl: API_BASE_URL,
+  _hasScrolledToSummary: false
     }
   },
   computed: {
@@ -203,11 +204,15 @@ export default {
       this.summary = ''
       this.error = ''
       this.loading = true
-      this.elapsed = 0
+    this.elapsed = 0
+    this._hasScrolledToSummary = false
       if (this._timer) clearInterval(this._timer)
       this._timer = setInterval(() => {
         this.elapsed++
       }, 1000)
+      this.$nextTick(() => {
+        this.scrollToSummary()
+      })
 
       try {
         const formData = new FormData()
@@ -223,6 +228,10 @@ export default {
 
         es.onmessage = event => {
           this.summary += event.data
+          if (this.summary && !this._hasScrolledToSummary) {
+            this.scrollToSummary()
+            this._hasScrolledToSummary = true
+          }
         }
 
         es.addEventListener('status', event => {
@@ -231,6 +240,7 @@ export default {
             this._closeES()
             this._clearTimer()
             this.notify('اكتمل التلخيص', 'success')
+            this.scrollToSummary()
           }
         })
 
@@ -254,6 +264,7 @@ export default {
       this.loading = false
       this._closeES()
       this._clearTimer()
+      this._hasScrolledToSummary = false
     },
     _closeES() {
       if (this._es) {
@@ -287,6 +298,7 @@ export default {
       this.error = ''
       this.file = null
       this.notify('تم بدء جلسة جديدة', 'success')
+      this._hasScrolledToSummary = false
     },
     notify(message, type = 'info') {
       this.toastMessage = message
@@ -301,6 +313,11 @@ export default {
       this._toastTimer = setTimeout(() => {
         this.showToast = false
       }, 4000)
+    },
+    scrollToSummary() {
+      const el = this.$refs.conversationSection
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
 }
@@ -376,7 +393,7 @@ video {
 
 .top-nav {
   width: min(1180px, 100% - 32px);
-  margin: 24px auto 0;
+  margin: 16px auto 0;
   padding: 18px 26px;
   display: flex;
   justify-content: space-between;
@@ -466,7 +483,7 @@ video {
 
 .workspace {
   width: min(1180px, 100% - 32px);
-  margin: 32px auto 40px;
+  margin: 16px auto 36px;
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 26px;
@@ -476,7 +493,7 @@ video {
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .card {
@@ -891,6 +908,8 @@ button {
   .top-nav {
     flex-direction: column;
     align-items: flex-start;
+    margin: 12px auto 0;
+    width: calc(100% - 24px);
   }
 
   .nav-actions {
@@ -903,7 +922,9 @@ button {
   }
 
   .workspace {
-    margin: 24px auto 32px;
+    width: 100%;
+    margin: 16px auto 24px;
+    padding: 0 12px;
   }
 
   .conversation-head {
@@ -918,6 +939,10 @@ button {
   .upload-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .card {
+    padding: 20px 18px;
   }
 }
 
