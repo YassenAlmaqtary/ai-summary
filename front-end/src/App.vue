@@ -101,7 +101,7 @@
               <span class="model-chip">{{ model || 'نموذج' }}</span>
             </div>
             <div class="message-bubble">
-              <MarkdownRenderer :source="summary" />
+              <MarkdownRenderer :source="structuredSummary" />
             </div>
           </article>
 
@@ -159,6 +159,10 @@ export default {
     },
     fileName() {
       return this.file ? this.file.name : ''
+    },
+    structuredSummary() {
+      if (!this.summary) return ''
+      return this.formatSummaryForDisplay(this.summary)
     }
   },
   mounted() {
@@ -315,6 +319,120 @@ export default {
       const el = this.$refs.conversationSection
       if (!el) return
       el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
+    formatSummaryForDisplay(text) {
+      if (!text) {
+        return ''
+      }
+
+      const hasRichMarkdown = /(\n\s*\n)|(^|\n)\s*(?:[-*+]\s|\d+\.\s|>\s)/.test(text)
+      if (hasRichMarkdown) {
+        return text
+      }
+
+      const sanitized = text
+        .replace(/[\u2022\u2023\u25E6\u2043\u2219]+/g, '•')
+        .replace(/\s+\n/g, '\n')
+  .replace(/([.!؟؛])(?=\S)/g, '$1 ')
+        .trim()
+
+      const normalized = sanitized
+        .replace(/\s*(#{1,6}\s+)/g, '\n\n$1')
+        .replace(/\n{3,}/g, '\n\n')
+
+      let sentences = []
+      if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+        const segmenter = new Intl.Segmenter('ar', { granularity: 'sentence' })
+        sentences = Array.from(segmenter.segment(normalized)).map(s => s.segment.trim())
+      }
+
+      if (!sentences.length) {
+        const sentenceSplitter = /(?<=[.!؟?؛])\s+/g
+        sentences = normalized
+          .split(sentenceSplitter)
+          .map(sentence => sentence.trim())
+          .filter(Boolean)
+      } else {
+        sentences = sentences.filter(Boolean)
+      }
+
+      if (sentences.length <= 1) {
+        const commaChunks = sanitized
+          .split(/،+/)
+          .map(chunk => chunk.trim())
+          .filter(Boolean)
+        if (commaChunks.length > 1) {
+          const [lead, ...rest] = commaChunks
+          const bulletLines = rest.map(chunk => `- ${chunk.replace(/^[\-•]+\s*/, '')}`)
+          return [lead, ...bulletLines].join('\n\n')
+        }
+        return sanitized
+      }
+
+      const paragraphs = []
+      let bucket = []
+      sentences.forEach(sentence => {
+        if (/^(?:•|-)/.test(sentence)) {
+          if (bucket.length) {
+            paragraphs.push(bucket.join(' '))
+            bucket = []
+          }
+          const bulletLine = sentence.replace(/^(?:•|-)+\s*/, '- ')
+          paragraphs.push(bulletLine)
+          return
+        }
+
+        const colonBullet = sentence.match(/^([\u0600-\u06FFA-Za-z0-9 ()\/\-]{3,120}?):\*\*\s*(.+)$/)
+        if (colonBullet) {
+          if (bucket.length) {
+            paragraphs.push(bucket.join(' '))
+            bucket = []
+          }
+          paragraphs.push(`- **${colonBullet[1].trim()}:** ${colonBullet[2].trim()}`)
+          return
+        }
+
+        bucket.push(sentence)
+        const bucketText = bucket.join(' ')
+        if (bucketText.length >= 160) {
+          paragraphs.push(bucketText)
+          bucket = []
+        }
+      })
+      if (bucket.length) {
+        paragraphs.push(bucket.join(' '))
+      }
+
+      const combined = []
+      let bulletBuffer = []
+      paragraphs.forEach(paragraph => {
+        const trimmed = paragraph.trim()
+        if (trimmed.startsWith('- ')) {
+          bulletBuffer.push(trimmed)
+        } else {
+          if (bulletBuffer.length) {
+            combined.push(bulletBuffer.join('\n'))
+            bulletBuffer = []
+          }
+          combined.push(trimmed)
+        }
+      })
+      if (bulletBuffer.length) {
+        combined.push(bulletBuffer.join('\n'))
+      }
+
+      const formatted = combined.map(block => {
+        if (/^##\s+/.test(block)) {
+          return block
+        }
+        const colonBold = block.match(/^([\u0600-\u06FFA-Za-z0-9 ()\/\-]{3,120}?):\*\*\s*(.+)$/)
+        if (colonBold) {
+          return `- **${colonBold[1].trim()}:** ${colonBold[2].trim()}`
+        }
+        return block
+      })
+
+      return formatted.join('\n\n')
     }
   }
 }
@@ -795,6 +913,16 @@ button {
   padding: 0;
   font-size: 0.95rem;
   line-height: 1.8;
+  white-space: pre-line;
+}
+
+.message-bubble .markdown-content p {
+  margin: 0 0 1.15em;
+}
+
+.message-bubble .markdown-content ul,
+.message-bubble .markdown-content ol {
+  margin-bottom: 1.2em;
 }
 
 .empty-state {
