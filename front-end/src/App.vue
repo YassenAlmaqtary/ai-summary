@@ -339,6 +339,10 @@ export default {
       const normalized = sanitized
         .replace(/\s*(#{1,6}\s+)/g, '\n\n$1')
         .replace(/\n{3,}/g, '\n\n')
+        .replace(/\*\*\s*(?=[،\.؟!؛])/g, '')
+        .replace(/([،\.؟!؛])\s*\*\*/g, '$1 ')
+        .replace(/\*\*(?=\s|$)/g, '')
+        .replace(/(^|\s)\*\*(?=\S)/g, '$1')
 
       let sentences = []
       if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
@@ -354,6 +358,26 @@ export default {
           .filter(Boolean)
       } else {
         sentences = sentences.filter(Boolean)
+      }
+
+      if (sentences.length > 1) {
+        const stitched = []
+        for (let i = 0; i < sentences.length; i++) {
+          const current = sentences[i]
+          const stripped = current.replace(/[^\p{L}\p{N}]+/gu, '')
+          if (stripped.length <= 2) {
+            if (i + 1 < sentences.length) {
+              sentences[i + 1] = `${current} ${sentences[i + 1]}`.trim()
+              continue
+            }
+            if (stitched.length) {
+              stitched[stitched.length - 1] = `${stitched[stitched.length - 1]} ${current}`.trim()
+              continue
+            }
+          }
+          stitched.push(current)
+        }
+        sentences = stitched
       }
 
       if (sentences.length <= 1) {
