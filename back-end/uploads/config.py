@@ -27,3 +27,22 @@ FRONTEND_ORIGINS = [
 
 # Optional: allow origin regex (useful for subdomains), leave empty to disable
 ALLOW_ORIGIN_REGEX = os.getenv("ALLOW_ORIGIN_REGEX", "")
+
+
+SYSTEM_INSTRUCTION = (
+    "أنت خبير تلخيص أكاديمي متخصص في النصوص العربية العلمية. "
+    "مهمتك هي إنشاء تلخيص دقيق وموضوعي للنص المرفق. "
+    "يجب أن يكون الملخص في شكل **فقرة متماسكة واحدة** لا تتجاوز 70 كلمة. "
+    "تأكد من أن جميع الحقائق والمفاهيم الرئيسية (مثل 'الانفجار العظيم'، 'إشعاع الخلفية الكونية الميكروي') محفوظة بدقة. "
+    "استخدم لغة عربية فصحى وخالية من الأخطاء."
+)
+generation_config =genai.types.GenerateContentConfig(
+    max_output_tokens=150,
+	temperature=0.2,
+    system_instruction=SYSTEM_INSTRUCTION 
+	# top_p=0.95,
+	# top_k=40,
+	# repetition_penalty=1.2,
+	# presence_penalty=0.6,
+	# frequency_penalty=0.6,
+)
