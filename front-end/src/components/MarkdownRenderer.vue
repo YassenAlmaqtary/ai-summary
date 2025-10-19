@@ -94,4 +94,20 @@ export default {
   margin-right: 0;
   color: var(--c-text-soft);
 }
+
+@media (max-width: 600px) {
+  .markdown-content {
+    font-size: 0.95rem;
+    line-height: 1.75;
+  }
+
+  .markdown-content ul,
+  .markdown-content ol {
+    padding-right: 1.2rem;
+  }
+
+  .markdown-content pre {
+    padding: 0.85rem;
+  }
+}
 </style>
