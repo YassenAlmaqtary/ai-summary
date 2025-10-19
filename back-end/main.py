@@ -147,6 +147,16 @@ def extract_text_from_pdf(file_path: Path) -> str:
     return "\n".join(page.get_textpage().get_text_range() for page in pdf)
 
 
+def _encode_sse_chunk(text: str) -> bytes:
+    """تهيئة نص خام ليكون متوافقاً مع صيغة SSE (data: ...)."""
+    if not text:
+        return b"data: \n\n"
+    sanitized = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = sanitized.split("\n")
+    payload = "".join(f"data: {line}\n" for line in lines)
+    return (payload + "\n").encode("utf-8")
+
+
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile):
@@ -281,10 +291,10 @@ async def summarize_gemini(session_id: str = Query(...), model: str | None = Non
             if cached and now - cached[0] < CACHE_TTL:
                 log.info("cache hit for summary h=%s", h[:8])
                 summary_text = cached[1]
-                # ابث المحتوى المخزن على دفعات ليوحي بالبث
                 step = 800
                 for i in range(0, len(summary_text), step):
-                    yield f"data: {summary_text[i:i+step]}\n\n".encode("utf-8")
+                    chunk = summary_text[i:i+step]
+                    yield _encode_sse_chunk(chunk)
                 yield b"event: status\ndata: DONE\n\n"
                 return
 
@@ -300,7 +310,7 @@ async def summarize_gemini(session_id: str = Query(...), model: str | None = Non
                 token = getattr(chunk, "text", None)
                 if token:
                     buf_parts.append(token)
-                    yield f"data: {token}\n\n".encode("utf-8")
+                    yield _encode_sse_chunk(token)
             full = "".join(buf_parts)
             summary_cache[h] = (time.time(), full)
             log.info("summary generated len=%d in %.2fs (cache key=%s)", len(full), time.time()-t0, h[:8])

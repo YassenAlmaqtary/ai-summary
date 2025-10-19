@@ -13,49 +13,51 @@
           <label for="model-select">نموذج الذكاء</label>
           <select id="model-select" v-model="model" :disabled="loading || models.length === 0">
             <option v-if="models.length === 0" disabled>جاري التحميل...</option>
-            <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+            <option v-for="option in models" :key="option" :value="option">{{ option }}</option>
           </select>
+          <span class="caption">اختر النموذج قبل رفع الملف</span>
         </div>
-        <button class="theme-toggle" @click="toggleTheme" :title="isDark ? 'وضع فاتح' : 'وضع داكن'">
+        <button class="theme-toggle" type="button" @click="toggleTheme" :title="isDark ? 'الوضع الفاتح' : 'الوضع الداكن'">
           {{ isDark ? '☀️' : '🌙' }}
         </button>
       </div>
     </nav>
 
+    <HeroBanner @go-upload="scrollToUpload" @show-sample="openSample" />
+
     <main class="workspace">
       <aside class="sidebar">
-        <section class="card upload-card">
+        <section ref="uploadCard" class="card upload-card">
           <header class="card-head">
             <div>
               <h3>ارفع ملفك</h3>
               <span class="caption">يُدعم PDF حتى 15MB</span>
             </div>
-            <span v-if="fileName" class="badge">تم اختيار ملف</span>
+            <span v-if="fileName" class="badge">ملف مختار</span>
           </header>
 
-          <FileUpload @file-selected="setFile" />
+          <FileUpload :key="fileResetKey" @file-selected="setFile" />
 
           <div class="upload-meta">
             <p v-if="fileName"><strong>الملف:</strong> {{ fileName }}</p>
             <p v-if="loading"><strong>الوقت:</strong> {{ formatElapsed(elapsed) }}</p>
-            <p v-if="summary && !loading"><strong>آخر تحديث:</strong> تم إنشاء ملخص جديد</p>
+            <p v-if="summary && !loading"><strong>الحالة:</strong> تم إنشاء ملخص</p>
           </div>
 
           <div class="upload-actions">
-            <button class="primary" :disabled="!file || loading" @click="summarize">
-              <span v-if="!loading">ابدأ التلخيص</span>
-              <span v-else>جاري التلخيص...</span>
+            <button class="primary" type="button" :disabled="!file || loading" @click="summarize">
+              {{ loading ? 'جاري التلخيص...' : 'ابدأ التلخيص' }}
             </button>
-            <button v-if="loading" class="ghost danger" @click="cancel">إيقاف</button>
-            <button v-if="summary && !loading" class="ghost" @click="reset">بدء جلسة جديدة</button>
+            <button class="ghost danger" type="button" v-if="loading" @click="cancel">إيقاف العملية</button>
+            <button class="ghost" type="button" :disabled="loading || (!file && !summary)" @click="reset">بدء جلسة جديدة</button>
           </div>
 
-          <div class="status-row" v-if="loading">
+          <div v-if="loading" class="status-row">
             <span class="pulse"></span>
             <span>نقوم بتحليل الملف وإعداد ملخص مناسب لك...</span>
           </div>
 
-          <p v-if="error" class="error-box">{{ error }}</p>
+          <div v-if="error" class="error-box">{{ error }}</div>
         </section>
 
         <section class="card hero-card">
@@ -78,17 +80,17 @@
         </section>
       </aside>
 
-  <section class="conversation" ref="conversationSection">
+      <section ref="conversationSection" class="conversation">
         <header class="conversation-head">
           <div class="head-copy">
             <span class="subtitle">مساحة الملخص</span>
             <h2>محادثة المُلخِّص الذكي</h2>
           </div>
           <div class="head-actions">
-            <button class="icon-btn" :disabled="!summary" @click="copySummary" title="نسخ">
+            <button class="icon-btn" type="button" :disabled="!summary" @click="copySummary" title="نسخ الملخص">
               📋
             </button>
-            <button class="icon-btn" :disabled="!summary" @click="downloadSummary" title="تنزيل">
+            <button class="icon-btn" type="button" :disabled="!summary" @click="downloadSummary" title="تنزيل الملخص">
               ⬇️
             </button>
           </div>
@@ -103,24 +105,36 @@
             <div class="message-bubble">
               <MarkdownRenderer :source="structuredSummary" />
             </div>
+            <button class="sample-trigger" type="button" @click="openSample">عرض ملخص تجريبي</button>
           </article>
 
           <div v-else class="empty-state">
             <div class="empty-icon">💡</div>
             <h3>ابدأ أول تلخيص لك</h3>
-            <p>ارفع ملف درس أو محاضرة، واختر النموذج، ثم اضغط على زر التلخيص. سنُظهر النتيجة هنا على هيئة رسالة دردشة سهلة القراءة.</p>
+            <p>
+              ارفع ملف درس أو محاضرة، واختر النموذج، ثم اضغط على زر التلخيص. سنُظهر النتيجة هنا على هيئة رسالة
+              دردشة سهلة القراءة.
+            </p>
             <div class="steps">
               <span>1. اختر ملف PDF تعليمي.</span>
               <span>2. اضغط على "ابدأ التلخيص".</span>
               <span>3. تابع النقاط المهمة، ودوّن ملاحظاتك.</span>
             </div>
+            <button class="sample-trigger" type="button" @click="openSample">عرض ملخص تجريبي</button>
           </div>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">© {{ year }} مشروع تعليمي لأي طالب • تم التطوير بحب</footer>
-    <Toast :show="showToast" :message="toastMessage" :type="toastType" @close="showToast=false" />
+
+    <transition name="fade">
+      <div v-if="showSampleModal" class="modal-backdrop" @click.self="closeSample">
+        <SampleSummary @close="closeSample" />
+      </div>
+    </transition>
+
+    <Toast :show="showToast" :message="toastMessage" :type="toastType" @close="showToast = false" />
   </div>
 </template>
 
@@ -129,28 +143,39 @@ import { API_BASE_URL } from './config.js'
 import FileUpload from './components/FileUpload.vue'
 import MarkdownRenderer from './components/MarkdownRenderer.vue'
 import Toast from './components/Toast.vue'
+import HeroBanner from './components/HeroBanner.vue'
+import SampleSummary from './components/SampleSummary.vue'
 
 export default {
-  components: { FileUpload, MarkdownRenderer, Toast },
+  name: 'App',
+  components: {
+    FileUpload,
+    MarkdownRenderer,
+    Toast,
+    HeroBanner,
+    SampleSummary
+  },
   data() {
     return {
       file: null,
+      fileResetKey: 0,
       summary: '',
       loading: false,
       error: '',
-      year: new Date().getFullYear(),
       elapsed: 0,
-      _timer: null,
-      _es: null,
+      year: new Date().getFullYear(),
+      theme: 'light',
+      model: '',
+      models: [],
+      apiBaseUrl: API_BASE_URL,
       showToast: false,
       toastType: 'info',
       toastMessage: '',
+      showSampleModal: false,
+      _timer: null,
+      _es: null,
       _toastTimer: null,
-      model: '',
-      models: [],
-  theme: 'light',
-  apiBaseUrl: API_BASE_URL,
-  _hasScrolledToSummary: false
+      _hasScrolledToSummary: false
     }
   },
   computed: {
@@ -177,17 +202,18 @@ export default {
   methods: {
     async loadModels() {
       try {
-        const res = await fetch(`${this.apiBaseUrl}/models`)
-        if (!res.ok) return
-        const data = await res.json()
-        this.models = data.models || []
-        this.model = data.default || this.models[0] || ''
-      } catch (e) {
-        // ignore
+        const response = await fetch(`${this.apiBaseUrl}/models`)
+        if (!response.ok) return
+        const payload = await response.json()
+        this.models = payload.models || []
+        this.model = payload.default || this.models[0] || ''
+      } catch (error) {
+        console.warn('تعذر تحميل النماذج', error)
       }
     },
     setFile(file) {
       this.file = file
+      this.error = ''
     },
     toggleTheme() {
       const nextTheme = this.isDark ? 'light' : 'dark'
@@ -196,8 +222,12 @@ export default {
       this.notify(nextTheme === 'dark' ? 'تم تفعيل الوضع الداكن' : 'تم تفعيل الوضع الفاتح', 'success')
     },
     formatElapsed(seconds) {
-      const minutes = Math.floor(seconds / 60).toString().padStart(2, '0')
-      const remainder = (seconds % 60).toString().padStart(2, '0')
+      const minutes = Math.floor(seconds / 60)
+        .toString()
+        .padStart(2, '0')
+      const remainder = (seconds % 60)
+        .toString()
+        .padStart(2, '0')
       return `${minutes}:${remainder}`
     },
     async summarize() {
@@ -205,29 +235,49 @@ export default {
         this.notify('⚠️ اختر ملف PDF أولاً!', 'error')
         return
       }
+
+      this._closeES()
+      this._clearTimer()
+
       this.summary = ''
       this.error = ''
       this.loading = true
-    this.elapsed = 0
-    this._hasScrolledToSummary = false
-      if (this._timer) clearInterval(this._timer)
+      this.elapsed = 0
+      this._hasScrolledToSummary = false
+
       this._timer = setInterval(() => {
-        this.elapsed++
+        this.elapsed += 1
       }, 1000)
 
       try {
         const formData = new FormData()
         formData.append('file', this.file)
-        const res = await fetch(`${this.apiBaseUrl}/upload`, { method: 'POST', body: formData })
-        if (!res.ok) throw new Error('فشل رفع الملف')
-        const data = await res.json()
-        const sessionId = data.session_id
 
-        const url = `${this.apiBaseUrl}/summarize-gemini?session_id=${encodeURIComponent(sessionId)}&model=${encodeURIComponent(this.model)}`
+        const uploadResponse = await fetch(`${this.apiBaseUrl}/upload`, {
+          method: 'POST',
+          body: formData
+        })
+
+        if (!uploadResponse.ok) {
+          throw new Error('فشل رفع الملف')
+        }
+
+        const uploadData = await uploadResponse.json()
+        const sessionId = uploadData.session_id
+
+        if (!sessionId) {
+          throw new Error('تعذر بدء جلسة التلخيص')
+        }
+
+        const url = `${this.apiBaseUrl}/summarize-gemini?session_id=${encodeURIComponent(
+          sessionId
+        )}&model=${encodeURIComponent(this.model)}`
+
         const es = new EventSource(url)
         this._es = es
 
         es.onmessage = event => {
+          if (!event.data) return
           this.summary += event.data
           if (this.summary && !this._hasScrolledToSummary) {
             this.scrollToSummary()
@@ -238,46 +288,61 @@ export default {
         es.addEventListener('status', event => {
           if (event.data === 'DONE') {
             this.loading = false
+            this.notify('اكتمل التلخيص', 'success')
             this._closeES()
             this._clearTimer()
-            this.notify('اكتمل التلخيص', 'success')
             this.scrollToSummary()
           }
         })
 
         es.addEventListener('error', () => {
           this.loading = false
+          this.notify('تعذر إكمال التلخيص', 'error')
           this._closeES()
           this._clearTimer()
-          this.notify('تعذر إكمال التلخيص', 'error')
         })
       } catch (error) {
         this.loading = false
-        this._clearTimer()
         this.notify(error.message || 'تعذر رفع الملف', 'error')
-      } finally {
-        if (!this.loading && this._timer) {
-          this._clearTimer()
-        }
+        this._clearTimer()
+        this._closeES()
       }
     },
     cancel() {
+      if (!this.loading) return
       this.loading = false
-      this._closeES()
+      this.notify('تم إيقاف عملية التلخيص', 'info')
       this._clearTimer()
+      this._closeES()
       this._hasScrolledToSummary = false
     },
-    _closeES() {
-      if (this._es) {
-        this._es.close()
-        this._es = null
-      }
+    reset() {
+      this._closeES()
+      this._clearTimer()
+      this.summary = ''
+      this.error = ''
+      this.file = null
+      this.fileResetKey += 1
+      this.loading = false
+      this._hasScrolledToSummary = false
+      this.notify('تم بدء جلسة جديدة', 'success')
     },
-    _clearTimer() {
-      if (this._timer) {
-        clearInterval(this._timer)
-        this._timer = null
+    notify(message, type = 'info') {
+      this.toastMessage = message
+      this.toastType = type
+      this.showToast = true
+
+      if (type === 'error') {
+        this.error = message
       }
+
+      clearTimeout(this._toastTimer)
+      this._toastTimer = setTimeout(() => {
+        this.showToast = false
+        if (type !== 'error') {
+          this.error = ''
+        }
+      }, 4000)
     },
     copySummary() {
       if (!this.summary) return
@@ -294,36 +359,36 @@ export default {
       URL.revokeObjectURL(link.href)
       this.notify('تم التنزيل', 'success')
     },
-    reset() {
-      this.summary = ''
-      this.error = ''
-      this.file = null
-      this.notify('تم بدء جلسة جديدة', 'success')
-      this._hasScrolledToSummary = false
-    },
-    notify(message, type = 'info') {
-      this.toastMessage = message
-      this.toastType = type
-      this.showToast = true
-      if (type === 'error') {
-        this.error = message
-      } else {
-        this.error = ''
-      }
-      clearTimeout(this._toastTimer)
-      this._toastTimer = setTimeout(() => {
-        this.showToast = false
-      }, 4000)
+    scrollToUpload() {
+      const element = this.$refs.uploadCard
+      if (!element) return
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
     },
     scrollToSummary() {
-      const el = this.$refs.conversationSection
-      if (!el) return
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      const element = this.$refs.conversationSection
+      if (!element) return
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
+    openSample() {
+      this.showSampleModal = true
+    },
+    closeSample() {
+      this.showSampleModal = false
+    },
+    _closeES() {
+      if (this._es) {
+        this._es.close()
+        this._es = null
+      }
+    },
+    _clearTimer() {
+      if (this._timer) {
+        clearInterval(this._timer)
+        this._timer = null
+      }
     },
     formatSummaryForDisplay(text) {
-      if (!text) {
-        return ''
-      }
+      if (!text) return ''
 
       const hasRichMarkdown = /(\n\s*\n)|(^|\n)\s*(?:[-*+]\s|\d+\.\s|>\s)/.test(text)
       if (hasRichMarkdown) {
@@ -333,51 +398,27 @@ export default {
       const sanitized = text
         .replace(/[\u2022\u2023\u25E6\u2043\u2219]+/g, '•')
         .replace(/\s+\n/g, '\n')
-  .replace(/([.!؟؛])(?=\S)/g, '$1 ')
+        .replace(/([.!؟؛])(?=\S)/g, '$1 ')
         .trim()
 
       const normalized = sanitized
         .replace(/\s*(#{1,6}\s+)/g, '\n\n$1')
         .replace(/\n{3,}/g, '\n\n')
-        .replace(/\*\*\s*(?=[،\.؟!؛])/g, '')
-        .replace(/([،\.؟!؛])\s*\*\*/g, '$1 ')
-        .replace(/\*\*(?=\s|$)/g, '')
-        .replace(/(^|\s)\*\*(?=\S)/g, '$1')
 
       let sentences = []
       if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
         const segmenter = new Intl.Segmenter('ar', { granularity: 'sentence' })
-        sentences = Array.from(segmenter.segment(normalized)).map(s => s.segment.trim())
+        sentences = Array.from(segmenter.segment(normalized)).map(segment => segment.segment.trim())
       }
 
       if (!sentences.length) {
-        const sentenceSplitter = /(?<=[.!؟?؛])\s+/g
+        const splitter = /(?<=[.!؟?؛])\s+/g
         sentences = normalized
-          .split(sentenceSplitter)
+          .split(splitter)
           .map(sentence => sentence.trim())
           .filter(Boolean)
       } else {
         sentences = sentences.filter(Boolean)
-      }
-
-      if (sentences.length > 1) {
-        const stitched = []
-        for (let i = 0; i < sentences.length; i++) {
-          const current = sentences[i]
-          const stripped = current.replace(/[^\p{L}\p{N}]+/gu, '')
-          if (stripped.length <= 2) {
-            if (i + 1 < sentences.length) {
-              sentences[i + 1] = `${current} ${sentences[i + 1]}`.trim()
-              continue
-            }
-            if (stitched.length) {
-              stitched[stitched.length - 1] = `${stitched[stitched.length - 1]} ${current}`.trim()
-              continue
-            }
-          }
-          stitched.push(current)
-        }
-        sentences = stitched
       }
 
       if (sentences.length <= 1) {
@@ -385,16 +426,19 @@ export default {
           .split(/،+/)
           .map(chunk => chunk.trim())
           .filter(Boolean)
+
         if (commaChunks.length > 1) {
           const [lead, ...rest] = commaChunks
           const bulletLines = rest.map(chunk => `- ${chunk.replace(/^[\-•]+\s*/, '')}`)
           return [lead, ...bulletLines].join('\n\n')
         }
+
         return sanitized
       }
 
       const paragraphs = []
       let bucket = []
+
       sentences.forEach(sentence => {
         if (/^(?:•|-)/.test(sentence)) {
           if (bucket.length) {
@@ -423,12 +467,14 @@ export default {
           bucket = []
         }
       })
+
       if (bucket.length) {
         paragraphs.push(bucket.join(' '))
       }
 
       const combined = []
       let bulletBuffer = []
+
       paragraphs.forEach(paragraph => {
         const trimmed = paragraph.trim()
         if (trimmed.startsWith('- ')) {
@@ -441,6 +487,7 @@ export default {
           combined.push(trimmed)
         }
       })
+
       if (bulletBuffer.length) {
         combined.push(bulletBuffer.join('\n'))
       }
@@ -622,7 +669,7 @@ video {
 
 .workspace {
   width: min(1180px, 100% - 32px);
-  margin: 16px auto 36px;
+  margin: 24px auto 36px;
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 26px;
@@ -935,9 +982,11 @@ button {
 .message-bubble .markdown-content {
   margin: 0;
   padding: 0;
-  font-size: 0.95rem;
-  line-height: 1.8;
-  white-space: pre-line;
+    font-size: 0.95rem;
+    line-height: 1.85;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .message-bubble .markdown-content p {
@@ -947,6 +996,21 @@ button {
 .message-bubble .markdown-content ul,
 .message-bubble .markdown-content ol {
   margin-bottom: 1.2em;
+}
+
+.sample-trigger {
+  align-self: flex-start;
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  background: transparent;
+  color: var(--accent);
+  padding: 12px 18px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  transition: var(--transition);
+}
+
+.sample-trigger:hover {
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
 .empty-state {
@@ -1039,6 +1103,26 @@ button {
   padding: 18px 0;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.52);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 80;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
 @media (max-width: 1024px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -1056,14 +1140,35 @@ button {
 @media (max-width: 720px) {
   .top-nav {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     margin: 12px auto 0;
     width: calc(100% - 24px);
+    padding: 16px 18px;
+  }
+
+  .brand {
+    width: 100%;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .brand-copy h1 {
+    font-size: clamp(1rem, 4vw, 1.25rem);
+  }
+
+  .brand-copy p {
+    font-size: 0.78rem;
   }
 
   .nav-actions {
     width: 100%;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .theme-toggle {
+    align-self: flex-start;
   }
 
   .model-picker select {
@@ -1076,13 +1181,34 @@ button {
     padding: 0 12px;
   }
 
+  .conversation {
+    min-height: 420px;
+  }
+
   .conversation-head {
     flex-direction: column;
     align-items: flex-start;
+    padding: 22px 20px 0;
+    gap: 12px;
   }
 
   .head-actions {
-    align-self: flex-end;
+    align-self: stretch;
+    justify-content: flex-end;
+  }
+
+  .chat-area {
+    padding: 18px 20px 24px;
+    gap: 18px;
+  }
+
+  .message-bubble {
+    padding: 18px;
+  }
+
+  .message-bubble .markdown-content {
+    font-size: 0.92rem;
+    line-height: 1.8;
   }
 
   .upload-actions {
@@ -1113,6 +1239,69 @@ button {
 
   .message-bubble {
     border-radius: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .top-nav {
+    padding: 14px 16px;
+    gap: 14px;
+  }
+
+  .brand {
+    flex-wrap: wrap;
+  }
+
+  .brand-mark {
+    width: 46px;
+    height: 46px;
+    font-size: 24px;
+  }
+
+  .nav-actions {
+    gap: 10px;
+  }
+
+  .theme-toggle {
+    align-self: flex-end;
+  }
+
+  .workspace {
+    padding: 0 10px;
+    gap: 18px;
+  }
+
+  .card {
+    padding: 18px 16px;
+  }
+
+  .conversation-head {
+    padding: 20px 18px 0;
+  }
+
+  .chat-area {
+    padding: 16px 18px 22px;
+  }
+
+  .message-bubble {
+    padding: 16px;
+  }
+
+  .sample-trigger {
+    width: 100%;
+    text-align: center;
+  }
+
+  .steps span {
+    padding: 8px 10px;
+  }
+
+  .site-footer {
+    padding: 16px 0;
+  }
+
+  .modal-backdrop {
+    padding: 16px;
   }
 }
 
