@@ -160,41 +160,6 @@ export default {
   .hero {
     border-radius: 24px;
     margin-top: 20px;
-    grid-template-columns: 1fr;
-    text-align: center;
-  }
-
-  .hero-actions {
-    justify-content: center;
-  }
-
-  .hero-card {
-    margin-inline: auto;
-  }
-}
-
-@media (max-width: 480px) {
-  .hero {
-    padding: 24px 18px;
-    gap: 20px;
-  }
-
-  .hero-copy h1 {
-    font-size: clamp(1.4rem, 6vw, 1.8rem);
-  }
-
-  .hero-copy p {
-    font-size: 0.95rem;
-  }
-
-  .hero-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .hero-cta,
-  .hero-secondary {
-    width: 100%;
   }
 }
 </style>

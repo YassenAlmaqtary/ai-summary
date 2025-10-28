@@ -982,11 +982,9 @@ button {
 .message-bubble .markdown-content {
   margin: 0;
   padding: 0;
-    font-size: 0.95rem;
-    line-height: 1.85;
-    white-space: normal;
-    word-break: break-word;
-    overflow-wrap: anywhere;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  white-space: pre-line;
 }
 
 .message-bubble .markdown-content p {
@@ -1140,35 +1138,14 @@ button {
 @media (max-width: 720px) {
   .top-nav {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
     margin: 12px auto 0;
     width: calc(100% - 24px);
-    padding: 16px 18px;
-  }
-
-  .brand {
-    width: 100%;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .brand-copy h1 {
-    font-size: clamp(1rem, 4vw, 1.25rem);
-  }
-
-  .brand-copy p {
-    font-size: 0.78rem;
   }
 
   .nav-actions {
     width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
-  .theme-toggle {
-    align-self: flex-start;
+    justify-content: space-between;
   }
 
   .model-picker select {
@@ -1181,34 +1158,13 @@ button {
     padding: 0 12px;
   }
 
-  .conversation {
-    min-height: 420px;
-  }
-
   .conversation-head {
     flex-direction: column;
     align-items: flex-start;
-    padding: 22px 20px 0;
-    gap: 12px;
   }
 
   .head-actions {
-    align-self: stretch;
-    justify-content: flex-end;
-  }
-
-  .chat-area {
-    padding: 18px 20px 24px;
-    gap: 18px;
-  }
-
-  .message-bubble {
-    padding: 18px;
-  }
-
-  .message-bubble .markdown-content {
-    font-size: 0.92rem;
-    line-height: 1.8;
+    align-self: flex-end;
   }
 
   .upload-actions {
@@ -1239,69 +1195,6 @@ button {
 
   .message-bubble {
     border-radius: 18px;
-  }
-}
-
-@media (max-width: 480px) {
-  .top-nav {
-    padding: 14px 16px;
-    gap: 14px;
-  }
-
-  .brand {
-    flex-wrap: wrap;
-  }
-
-  .brand-mark {
-    width: 46px;
-    height: 46px;
-    font-size: 24px;
-  }
-
-  .nav-actions {
-    gap: 10px;
-  }
-
-  .theme-toggle {
-    align-self: flex-end;
-  }
-
-  .workspace {
-    padding: 0 10px;
-    gap: 18px;
-  }
-
-  .card {
-    padding: 18px 16px;
-  }
-
-  .conversation-head {
-    padding: 20px 18px 0;
-  }
-
-  .chat-area {
-    padding: 16px 18px 22px;
-  }
-
-  .message-bubble {
-    padding: 16px;
-  }
-
-  .sample-trigger {
-    width: 100%;
-    text-align: center;
-  }
-
-  .steps span {
-    padding: 8px 10px;
-  }
-
-  .site-footer {
-    padding: 16px 0;
-  }
-
-  .modal-backdrop {
-    padding: 16px;
   }
 }
 
