@@ -15,7 +15,14 @@ OLLAMA_MODELS = [m.strip() for m in os.getenv("OLLAMA_MODELS", DEFAULT_MODEL).sp
 gemini_models = [m.strip() for m in os.getenv("gemini_models", DEFAULT_MODEL).split(",") if m.strip()]
 # Maximum PDF size in bytes (e.g., 15 MB)
 MAX_PDF_SIZE = int(os.getenv("MAX_PDF_SIZE", str(15 * 1024 * 1024)))
-client = genai.Client(api_key=Gemnikey)
+# Create GenAI client only when an API key is provided to avoid raising
+# an exception on import if the environment variable is not set.
+client = None
+if Gemnikey:
+	try:
+		client = genai.Client(api_key=Gemnikey)
+	except Exception:
+		client = None
 
 # Frontend origins allowed for CORS (comma-separated)
 FRONTEND_ORIGINS = [

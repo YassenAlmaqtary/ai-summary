@@ -26,10 +26,16 @@ from uploads.config import (
     MAX_PDF_SIZE,
     DEFAULT_MODEL,
     gemini_models,
-    client,
     FRONTEND_ORIGINS,
     ALLOW_ORIGIN_REGEX,
 )
+
+from core.infra import get_genai_client
+from core.services import UploadService, AgentService
+
+# Agent / retrieval utilities
+from ai.agent import build_lesson_prompt, stream_agent_response
+from ai.langchain_agent import get_langchain_agent
 
 # ============== إنشاء تطبيق FastAPI ==============
 app = FastAPI(title="AI PDF Summarizer API", version="1.1.0")
@@ -47,24 +53,43 @@ async def _warmup():
     sample_text = "اختبار تمهيدي صغير"  # very short
     try:
         # run sync streaming in executor to avoid blocking event loop
+        client = get_genai_client()
+        if client is None:
+            log.info("GenAI client not available, skipping warmup")
+            return
+
         def _do_warmup():
-            stream = client.models.generate_content_stream(
-                model=DEFAULT_MODEL,
-                contents=[sample_text]
-            )
-            # consume a couple of chunks then stop
-            taken = 0
-            for chunk in stream:
-                if getattr(chunk, "text", None):
-                    taken += 1
-                if taken >= 2:
-                    break
+            try:
+                stream = client.models.generate_content_stream(
+                    model=DEFAULT_MODEL,
+                    contents=[sample_text]
+                )
+                # consume a couple of chunks then stop
+                taken = 0
+                for chunk in stream:
+                    if getattr(chunk, "text", None):
+                        taken += 1
+                    if taken >= 2:
+                        break
+            except Exception as e:
+                log.debug(f"Warmup stream error (ignored): {e}")
 
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _do_warmup)
-    except Exception:
+        log.info("Warmup completed successfully")
+    except Exception as e:
         # ignore warmup errors
+        log.debug(f"Warmup error (ignored): {e}")
         pass
+
+@app.on_event("shutdown")
+async def _shutdown():
+    """Cleanup on shutdown"""
+    try:
+        log.info("Shutting down gracefully...")
+        # يمكن إضافة تنظيف إضافي هنا إذا لزم الأمر
+    except Exception as e:
+        log.debug(f"Shutdown cleanup error (ignored): {e}")
     
 # ============== هياكل التخزين داخل الذاكرة ==============
 text_storage: dict[str, str] = {}  # تخزين النص الخام المستخرج لكل جلسة session_id -> text
@@ -78,7 +103,17 @@ pending_extractions: dict[str, asyncio.Task] = {}
 UPLOAD_DIR = Path("temp")
 UPLOAD_DIR.mkdir(exist_ok=True)  # إنشاء المجلد إن لم يكن موجوداً
 
+# تطبيق الخدمات (UploadService و AgentService)
+upload_service = UploadService(storage_root=UPLOAD_DIR)
+agent_service = AgentService(index_root=UPLOAD_DIR / "indexes")
+
 FILE_TTL_SECONDS = 60 * 30  # حذف ملفات الـ PDF المؤقتة الأقدم من 30 دقيقة
+
+# (vectorstore managed via agent_service.adapter)
+# vsm = agent_service.adapter (use adapter methods when needed)
+
+# track index build status: session_id -> {status: pending|building|ready|failed, info: {...}}
+index_status: dict[str, dict] = {}
 
 def _cleanup_old_files() -> None:
     """تنظيف الملفات القديمة من المجلد المؤقت لتوفير المساحة."""
@@ -106,11 +141,46 @@ async def _extract_and_store(session_id: str, pdf_path: Path) -> None:
             pass
         text_storage[session_id] = text or ""
         log.info("extracted text for %s in %.2fs (chars=%d)", session_id, time.time()-start, len(text or ""))
+        # kick off background index build (non-blocking)
+        try:
+            index_status[session_id] = {"status": "pending", "info": {}}
+            asyncio.create_task(_build_index_background(session_id, text or ""))
+        except Exception:
+            log.exception("failed to schedule index build for %s", session_id)
     except Exception as e:
         text_storage[session_id] = ""
         log.exception("failed to extract text for %s: %s", session_id, e)
     finally:
         pending_extractions.pop(session_id, None)
+
+
+async def _build_index_background(session_id: str, text: str) -> None:
+    """Helper to build FAISS index in background after extraction completes."""
+    try:
+        # call blocking index builder in threadpool to avoid blocking loop
+        loop = asyncio.get_running_loop()
+        # mark building
+        index_status.setdefault(session_id, {})
+        index_status[session_id]["status"] = "building"
+        try:
+            await loop.run_in_executor(None, agent_service.build_index, session_id, text)
+            # on success mark ready and fill info
+            index_status[session_id]["status"] = "ready"
+            # attempt to inspect built files for info
+            try:
+                pkl = UPLOAD_DIR / "indexes" / session_id / "index.pkl"
+                if pkl.exists():
+                    import pickle
+                    with open(pkl, "rb") as f:
+                        chunks = pickle.load(f)
+                    index_status[session_id]["info"] = {"chunks": len(chunks)}
+            except Exception:
+                pass
+        except Exception:
+            index_status[session_id]["status"] = "failed"
+            log.exception("index build failed for %s", session_id)
+    except Exception:
+        log.exception("index build process error for %s", session_id)
 
 # ============== إعداد CORS للسماح لتطبيق الواجهة الأمامية بالاتصال ==============
 app.add_middleware(
@@ -301,6 +371,12 @@ async def summarize_gemini(session_id: str = Query(...), model: str | None = Non
             # لا يوجد كاش: اطلب من النموذج مع تتبع الزمن واجمع الناتج للتخزين لاحقاً
             prompt = build_prompt(text_ready)
             t0 = time.time()
+            # obtain client at call time
+            client = get_genai_client()
+            if client is None:
+                yield b"event: error\ndata: No GenAI client configured.\n\n"
+                return
+
             stream = client.models.generate_content_stream(
                 model=model_key,
                 contents=[prompt]
@@ -325,4 +401,126 @@ async def summarize_gemini(session_id: str = Query(...), model: str | None = Non
         "X-Accel-Buffering": "no",
     }
     return StreamingResponse(sse_gen(), media_type="text/event-stream", headers=headers)
+
+
+@app.get("/agent")
+async def lesson_agent(session_id: str | None = Query(None), q: str | None = Query(None), model: str | None = None, language: str = Query("العربية")):
+    """نقطة نهاية لوكيل دروس متقدّم.
+
+    يمكن استدعاؤها بإما `session_id` لاستخدام النص المستخرج من ملف مرفوع،
+    أو بالوسيط `q` لتمرير استعلام/نص مباشر.
+    سيحاول الوكيل استخدام فهرس FAISS المرتبط بالجلسة إن وُجد لاسترجاع مقاطع داعمة.
+    البث يتم عبر SSE كما في `/summarize-gemini`.
+    """
+    async def sse() -> AsyncGenerator[bytes, None]:
+        yield b"event: status\ndata: START\n\n"
+        try:
+            # determine core text
+            core_text = ""
+            if session_id:
+                core_text = text_storage.get(session_id)
+                if core_text is None and session_id in pending_extractions:
+                    try:
+                        await pending_extractions[session_id]
+                    except Exception:
+                        pass
+                    core_text = text_storage.get(session_id, "")
+            if not core_text and q:
+                core_text = q
+
+            if not core_text or not core_text.strip():
+                yield b"event: error\ndata: No text available for agent. Provide session_id or q.\n\n"
+                return
+
+            # retrieval if vector store available for this session_id
+            retrieved = None
+            try:
+                if session_id and agent_service.adapter and agent_service.adapter.has_index(session_id):
+                    retrieved = agent_service.retrieve(session_id, q or core_text, k=4)
+            except Exception as e:
+                log.warning("retrieval failed: %s", e)
+
+            prompt = build_lesson_prompt(core_text, retrieved_chunks=retrieved, language=language)
+
+            # stream from model
+            async for token in stream_agent_response(prompt, model=model):
+                yield _encode_sse_chunk(token)
+
+            yield b"event: status\ndata: DONE\n\n"
+        except Exception as e:
+            log.exception("agent error: %s", e)
+            yield f"event: error\ndata: {str(e)}\n\n".encode("utf-8")
+
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    return StreamingResponse(sse(), media_type="text/event-stream", headers=headers)
+
+
+@app.get("/index-status/{session_id}")
+async def get_index_status(session_id: str):
+    """Return simple status about background index build for a session."""
+    s = index_status.get(session_id)
+    if s is None:
+        return JSONResponse({"status": "not_found"}, status_code=404)
+    return JSONResponse(s)
+
+
+@app.get("/chat")
+async def chat_agent(session_id: str | None = Query(None), 
+                    q: str = Query(...), 
+                    model: str | None = None, 
+                    language: str = Query("العربية")):
+    """نقطة نهاية للوكيل الذكي باستخدام LangChain.
+    
+    يدعم المحادثة التفاعلية مع الوثيقة المرفوعة.
+    يمكن للمستخدم طرح أسئلة والحصول على إجابات ذكية.
+    """
+    async def sse() -> AsyncGenerator[bytes, None]:
+        yield b"event: status\ndata: START\n\n"
+        try:
+            # الحصول على النص الأساسي
+            core_text = ""
+            if session_id:
+                core_text = text_storage.get(session_id)
+                if core_text is None and session_id in pending_extractions:
+                    try:
+                        await pending_extractions[session_id]
+                    except Exception:
+                        pass
+                    core_text = text_storage.get(session_id, "")
+            
+            if not core_text or not core_text.strip():
+                yield "event: error\ndata: لا توجد وثيقة متاحة. يرجى رفع ملف PDF أولاً.\n\n".encode("utf-8")
+                return
+            
+            # إنشاء وكيل LangChain
+            agent = get_langchain_agent(model=model or DEFAULT_MODEL)
+            if not agent:
+                yield "event: error\ndata: تعذر تهيئة الوكيل الذكي. تأكد من إعدادات API.\n\n".encode("utf-8")
+                return
+            
+            # بث الاستجابة
+            async for token in agent.stream_response(
+                query=q,
+                session_id=session_id or "default",
+                agent_service=agent_service,
+                core_text=core_text
+            ):
+                yield _encode_sse_chunk(token)
+            
+            yield b"event: status\ndata: DONE\n\n"
+        except Exception as e:
+            log.exception("chat agent error: %s", e)
+            yield f"event: error\ndata: {str(e)}\n\n".encode("utf-8")
+    
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    return StreamingResponse(sse(), media_type="text/event-stream", headers=headers)
+
+
+@app.delete("/chat/{session_id}")
+async def clear_chat_memory(session_id: str):
+    """مسح ذاكرة المحادثة للجلسة"""
+    agent = get_langchain_agent()
+    if agent:
+        agent.clear_memory(session_id)
+    return JSONResponse({"cleared": True})
   

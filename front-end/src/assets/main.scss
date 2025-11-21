@@ -1,0 +1,11 @@
+// Main SCSS entry. Converted from main.css - keep minimal variables here
+$bg: #eef3ff;
+$text: #1f2534;
+
+body {
+  background: linear-gradient(140deg, $bg, rgba(255,255,255,0.6));
+  color: $text;
+  font-family: 'Cairo', 'Tajawal', system-ui, sans-serif;
+}
+
+/* Keep other styles in their original files or add progressively */
