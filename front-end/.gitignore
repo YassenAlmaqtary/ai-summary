@@ -34,3 +34,8 @@ coverage
 .env.*
 .env.local
 .env.*.local
+uploads/
+venv/
+.venv/
+temp/
+__pycache__/

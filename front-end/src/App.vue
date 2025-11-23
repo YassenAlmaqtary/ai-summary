@@ -16,6 +16,10 @@
             <option v-for="option in models" :key="option" :value="option">{{ option }}</option>
           </select>
           <span class="caption">اختر النموذج قبل رفع الملف</span>
+          <label style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+            <input type="checkbox" v-model="agentMode" :disabled="loading" />
+            <small>استخدام الوكيل المتقدم (درس تفاعلي)</small>
+          </label>
         </div>
         <button class="theme-toggle" type="button" @click="toggleTheme" :title="isDark ? 'الوضع الفاتح' : 'الوضع الداكن'">
           {{ isDark ? '☀️' : '🌙' }}
@@ -42,6 +46,8 @@
             <p v-if="fileName"><strong>الملف:</strong> {{ fileName }}</p>
             <p v-if="loading"><strong>الوقت:</strong> {{ formatElapsed(elapsed) }}</p>
             <p v-if="summary && !loading"><strong>الحالة:</strong> تم إنشاء ملخص</p>
+            <p v-if="indexStatus"><strong>فهرس التوثيق:</strong> {{ indexStatus.status }}</p>
+            <p v-if="indexStatus && indexStatus.info && indexStatus.info.chunks"><strong>مقاطع:</strong> {{ indexStatus.info.chunks }}</p>
           </div>
 
           <div class="upload-actions">
@@ -83,10 +89,19 @@
       <section ref="conversationSection" class="conversation">
         <header class="conversation-head">
           <div class="head-copy">
-            <span class="subtitle">مساحة الملخص</span>
-            <h2>محادثة المُلخِّص الذكي</h2>
+            <span class="subtitle">{{ chatMode ? 'محادثة تفاعلية' : 'مساحة الملخص' }}</span>
+            <h2>{{ chatMode ? 'الوكيل الذكي' : 'محادثة المُلخِّص الذكي' }}</h2>
           </div>
           <div class="head-actions">
+            <button 
+              class="icon-btn" 
+              type="button" 
+              :disabled="!lastSessionId" 
+              @click="chatMode = !chatMode" 
+              :title="chatMode ? 'التبديل إلى وضع الملخص' : 'التبديل إلى وضع المحادثة'"
+            >
+              {{ chatMode ? '📄' : '💬' }}
+            </button>
             <button class="icon-btn" type="button" :disabled="!summary" @click="copySummary" title="نسخ الملخص">
               📋
             </button>
@@ -96,7 +111,15 @@
           </div>
         </header>
 
-        <div class="chat-area">
+        <div v-if="chatMode" class="chat-area" style="height: 600px; padding: 0;">
+          <ChatInterface 
+            :session-id="lastSessionId"
+            :api-base-url="apiBaseUrl"
+            :model="model"
+          />
+        </div>
+
+        <div v-else class="chat-area">
           <article v-if="summary" class="assistant-message">
             <div class="message-meta">
               <span class="role-chip">المُلخِّص</span>
@@ -145,6 +168,7 @@ import MarkdownRenderer from './components/MarkdownRenderer.vue'
 import Toast from './components/Toast.vue'
 import HeroBanner from './components/HeroBanner.vue'
 import SampleSummary from './components/SampleSummary.vue'
+import ChatInterface from './components/ChatInterface.vue'
 
 export default {
   name: 'App',
@@ -153,7 +177,8 @@ export default {
     MarkdownRenderer,
     Toast,
     HeroBanner,
-    SampleSummary
+    SampleSummary,
+    ChatInterface
   },
   data() {
     return {
@@ -168,6 +193,11 @@ export default {
       model: '',
       models: [],
       apiBaseUrl: API_BASE_URL,
+      agentMode: false,
+      lastSessionId: null,
+      indexStatus: null,
+      chatMode: false,
+      _indexPollTimer: null,
       showToast: false,
       toastType: 'info',
       toastMessage: '',
@@ -198,6 +228,7 @@ export default {
   beforeUnmount() {
     this._clearTimer()
     this._closeES()
+      this._stopIndexPolling()
   },
   methods: {
     async loadModels() {
@@ -269,12 +300,22 @@ export default {
           throw new Error('تعذر بدء جلسة التلخيص')
         }
 
-        const url = `${this.apiBaseUrl}/summarize-gemini?session_id=${encodeURIComponent(
-          sessionId
-        )}&model=${encodeURIComponent(this.model)}`
+        let url
+        if (this.agentMode) {
+          url = `${this.apiBaseUrl}/agent?session_id=${encodeURIComponent(sessionId)}&model=${encodeURIComponent(this.model)}`
+        } else {
+          url = `${this.apiBaseUrl}/summarize-gemini?session_id=${encodeURIComponent(
+            sessionId
+          )}&model=${encodeURIComponent(this.model)}`
+        }
 
         const es = new EventSource(url)
         this._es = es
+
+        // start polling index build status
+        this.lastSessionId = sessionId
+        this.indexStatus = null
+        this._startIndexPolling(sessionId)
 
         es.onmessage = event => {
           if (!event.data) return
@@ -385,6 +426,36 @@ export default {
       if (this._timer) {
         clearInterval(this._timer)
         this._timer = null
+      }
+    },
+
+    _startIndexPolling(sessionId) {
+      this._stopIndexPolling()
+      this._indexPollTimer = setInterval(async () => {
+        try {
+          const res = await fetch(`${this.apiBaseUrl}/index-status/${encodeURIComponent(sessionId)}`)
+          if (!res.ok) {
+            if (res.status === 404) {
+              this.indexStatus = { status: 'not_found' }
+              return
+            }
+            return
+          }
+          const payload = await res.json()
+          this.indexStatus = payload
+          if (payload.status === 'ready' || payload.status === 'failed') {
+            this._stopIndexPolling()
+          }
+        } catch (e) {
+          // ignore network blips
+        }
+      }, 2000)
+    },
+
+    _stopIndexPolling() {
+      if (this._indexPollTimer) {
+        clearInterval(this._indexPollTimer)
+        this._indexPollTimer = null
       }
     },
     formatSummaryForDisplay(text) {
