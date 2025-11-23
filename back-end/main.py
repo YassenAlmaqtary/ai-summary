@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
 from uploads.config import FRONTEND_ORIGINS, ALLOW_ORIGIN_REGEX, DEFAULT_MODEL
 from core.infra import get_genai_client
+from core.config import UPLOAD_DIR, INDEX_ROOT
 
 # Configure logging
 logging.basicConfig(
@@ -26,6 +27,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
     log.info("Starting application...")
+    # Ensure directories exist
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    INDEX_ROOT.mkdir(parents=True, exist_ok=True)
+    log.info(f"Upload directory: {UPLOAD_DIR}")
+    log.info(f"Index directory: {INDEX_ROOT}")
     await _warmup()
     yield
     # Shutdown

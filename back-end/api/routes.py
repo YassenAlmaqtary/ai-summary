@@ -25,7 +25,6 @@ from application.use_cases import PDFExtractionUseCase
 from domain.entities import Session, IndexStatus
 from uploads.config import MAX_PDF_SIZE, DEFAULT_MODEL, gemini_models
 from core.config import UPLOAD_DIR, INDEX_ROOT
-from uploads.config import MAX_PDF_SIZE, DEFAULT_MODEL, gemini_models
 from core.infra import get_genai_client
 import logging
 
@@ -64,46 +63,74 @@ def _cleanup_old_files() -> None:
 @router.post("/upload")
 async def upload_pdf(file: UploadFile):
     """Upload PDF file and extract text"""
-    if file.content_type not in {"application/pdf", "application/octet-stream"}:
-        raise HTTPException(status_code=415, detail="Unsupported file type. Must be PDF.")
-    
-    data = await file.read()
-    if len(data) > MAX_PDF_SIZE:
-        raise HTTPException(status_code=413, detail="File too large.")
-    
-    # Generate session ID
-    session_id = str(uuid.uuid4())
-    pdf_path = Path(UPLOAD_DIR) / f"{session_id}.pdf"
-    
-    # Save file
     try:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, pdf_path.write_bytes, data)
-    except PermissionError:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Server error: Permission denied to save file. Check server user permissions on {UPLOAD_DIR} directory."
-        )
+        # Validate content type
+        if file.content_type not in {"application/pdf", "application/octet-stream"}:
+            raise HTTPException(status_code=415, detail="Unsupported file type. Must be PDF.")
+        
+        # Read file data
+        data = await file.read()
+        if len(data) > MAX_PDF_SIZE:
+            raise HTTPException(status_code=413, detail="File too large.")
+        
+        # Ensure upload directory exists
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Generate session ID
+        session_id = str(uuid.uuid4())
+        pdf_path = Path(UPLOAD_DIR) / f"{session_id}.pdf"
+        
+        # Save file
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, pdf_path.write_bytes, data)
+        except PermissionError as e:
+            log.error(f"Permission error saving file: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Server error: Permission denied to save file. Check server user permissions on {UPLOAD_DIR} directory."
+            )
+        except Exception as e:
+            log.exception(f"Error saving file: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Server I/O error during file save: {type(e).__name__}: {str(e)}"
+            )
+        
+        # Start extraction in background
+        try:
+            use_case = get_pdf_extraction_use_case()
+            vector_repo = get_vector_store_repository()
+            index_status_repo = get_index_status_repository()
+            
+            task = asyncio.create_task(
+                use_case.extract_and_store(session_id, pdf_path, vector_repo, index_status_repo)
+            )
+            pending_extractions[session_id] = task
+        except Exception as e:
+            log.exception(f"Error starting extraction: {e}")
+            # Try to clean up the file
+            try:
+                pdf_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error starting extraction: {str(e)}"
+            )
+        
+        _cleanup_old_files()
+        log.info(f"Accepted upload session={session_id} size={len(data)/1024:.2f}KB")
+        
+        return {"session_id": session_id, "characters": 0}
+    except HTTPException:
+        raise
     except Exception as e:
+        log.exception(f"Unexpected error in upload endpoint: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Server I/O error during file save: {type(e).__name__}."
+            detail=f"Internal server error: {str(e)}"
         )
-    
-    # Start extraction in background
-    use_case = get_pdf_extraction_use_case()
-    vector_repo = get_vector_store_repository()
-    index_status_repo = get_index_status_repository()
-    
-    task = asyncio.create_task(
-        use_case.extract_and_store(session_id, pdf_path, vector_repo, index_status_repo)
-    )
-    pending_extractions[session_id] = task
-    
-    _cleanup_old_files()
-    log.info(f"Accepted upload session={session_id} size={len(data)/1024:.2f}KB")
-    
-    return {"session_id": session_id, "characters": 0}
 
 
 @router.get("/health")
