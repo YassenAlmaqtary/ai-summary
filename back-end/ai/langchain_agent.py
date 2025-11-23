@@ -148,8 +148,7 @@ class LangChainAgent:
                 # استخدام genai client مباشرة
                 try:
                     prompt = f"""{system_prompt}
-
-{user_prompt}"""
+                    {user_prompt}"""
                     
                     stream = client.models.generate_content_stream(
                         model=self.model,
