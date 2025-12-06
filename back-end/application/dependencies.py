@@ -9,7 +9,8 @@ from domain.repositories import (
     SessionRepository,
     CacheRepository,
     VectorStoreRepository,
-    IndexStatusRepository
+    IndexStatusRepository,
+    SessionHistoryRepository,
 )
 from infrastructure.repositories import (
     InMemorySessionRepository,
@@ -17,14 +18,15 @@ from infrastructure.repositories import (
     FAISSVectorStoreRepository,
     InMemoryIndexStatusRepository
 )
+from infrastructure.history_repository import JsonSessionHistoryRepository
 from application.use_cases import (
     PDFExtractionUseCase,
     SummaryUseCase,
     LessonAgentUseCase,
-    ChatAgentUseCase
+    ChatAgentUseCase,
+    SessionHistoryUseCase,
 )
-from core.config import INDEX_ROOT
-from pathlib import Path
+from core.config import INDEX_ROOT, HISTORY_FILE
 from core.services import AgentService
 
 # Global instances (singleton pattern)
@@ -33,6 +35,7 @@ _cache_repo: Optional[CacheRepository] = None
 _vector_repo: Optional[VectorStoreRepository] = None
 _index_status_repo: Optional[IndexStatusRepository] = None
 _agent_service: Optional[AgentService] = None
+_history_repo: Optional[SessionHistoryRepository] = None
 
 
 def get_session_repository() -> SessionRepository:
@@ -79,10 +82,19 @@ def get_agent_service() -> AgentService:
     return _agent_service
 
 
+def get_history_repository() -> SessionHistoryRepository:
+    """Get session history repository instance"""
+    global _history_repo
+    if _history_repo is None:
+        _history_repo = JsonSessionHistoryRepository(HISTORY_FILE)
+    return _history_repo
+
+
 def get_pdf_extraction_use_case() -> PDFExtractionUseCase:
     """Get PDF extraction use case"""
     return PDFExtractionUseCase(
-        session_repo=get_session_repository()
+        session_repo=get_session_repository(),
+        history_repo=get_history_repository(),
     )
 
 
@@ -107,5 +119,12 @@ def get_chat_agent_use_case() -> ChatAgentUseCase:
     return ChatAgentUseCase(
         session_repo=get_session_repository(),
         vector_repo=get_vector_store_repository()
+    )
+
+
+def get_history_use_case() -> SessionHistoryUseCase:
+    """Get session history use case"""
+    return SessionHistoryUseCase(
+        history_repo=get_history_repository()
     )
 

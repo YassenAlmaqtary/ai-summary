@@ -30,3 +30,18 @@ class SummaryCache:
     created_at: float
     ttl: int = 600  # 10 minutes default
 
+
+@dataclass
+class SessionHistory:
+    """Session history entry for previously processed uploads."""
+    session_id: str
+    filename: str
+    uploaded_at: datetime
+    status: str  # uploaded, processing, ready, failed
+    model: str | None = None
+    agent_mode: bool = False
+    characters: int | None = None
+    pages: int | None = None
+    words: int | None = None
+    reading_minutes: int | None = None
+    file_size: int | None = None

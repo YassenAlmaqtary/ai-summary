@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Uploads and indexes
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", str(ROOT / "temp")))
 INDEX_ROOT = Path(os.getenv("INDEX_ROOT", str(ROOT / "temp" / "indexes")))
+HISTORY_FILE = Path(os.getenv("HISTORY_FILE", str(ROOT / "temp" / "history_sessions.json")))
 
 # GenAI settings
 GEMNIKEY = os.getenv("Gemnikey", "")

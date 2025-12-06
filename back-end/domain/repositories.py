@@ -1,7 +1,7 @@
 """Repository interfaces (Ports)"""
 from abc import ABC, abstractmethod
 from typing import Optional, List
-from domain.entities import Session, IndexStatus
+from domain.entities import Session, IndexStatus, SessionHistory
 
 
 class SessionRepository(ABC):
@@ -77,5 +77,38 @@ class IndexStatusRepository(ABC):
     @abstractmethod
     async def set(self, status: IndexStatus) -> None:
         """Set index status"""
+        pass
+
+
+class SessionHistoryRepository(ABC):
+    """Repository interface for session history"""
+
+    @abstractmethod
+    async def upsert(self, entry: SessionHistory) -> None:
+        """Create or update a history entry"""
+        pass
+
+    @abstractmethod
+    async def update_status(
+        self,
+        session_id: str,
+        status: str,
+        *,
+        characters: Optional[int] = None,
+        pages: Optional[int] = None,
+        words: Optional[int] = None,
+        reading_minutes: Optional[int] = None,
+    ) -> None:
+        """Update status for a given session"""
+        pass
+
+    @abstractmethod
+    async def list_recent(self, limit: int = 20) -> List[SessionHistory]:
+        """List recent history entries"""
+        pass
+
+    @abstractmethod
+    async def get(self, session_id: str) -> Optional[SessionHistory]:
+        """Get history entry by session"""
         pass
 

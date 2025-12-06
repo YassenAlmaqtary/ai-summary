@@ -84,6 +84,23 @@
             <li>انسخ الملخص وأضف ملاحظاتك عليه داخل دفتر الدراسة.</li>
           </ul>
         </section>
+
+        <section class="card history-card" v-if="history.length">
+          <h3>جلسات سابقة</h3>
+          <ul class="history-list">
+            <li v-for="item in history" :key="item.session_id">
+              <div class="history-head">
+                <span class="history-name">{{ item.filename || 'ملف بدون اسم' }}</span>
+                <span class="history-status" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span>
+              </div>
+              <small class="history-meta">{{ formatHistoryDate(item.uploaded_at) }}</small>
+              <div class="history-meta stats-row" v-if="item.pages || item.words">
+                <span v-if="item.pages">{{ item.pages }} صفحة</span>
+                <span v-if="item.words">• {{ item.words }} كلمة</span>
+              </div>
+            </li>
+          </ul>
+        </section>
       </aside>
 
       <section ref="conversationSection" class="conversation">
@@ -110,6 +127,28 @@
             </button>
           </div>
         </header>
+
+        <div class="stats-card" v-if="hasStats">
+          <h3>إحصاءات المستند</h3>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="stat-label">عدد الصفحات</span>
+              <strong>{{ statsSnapshot.pages ?? '...' }}</strong>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">عدد الكلمات</span>
+              <strong>{{ statsSnapshot.words ?? '...' }}</strong>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">وقت القراءة</span>
+              <strong>{{ statsSnapshot.readingMinutes ? formatReadingMinutes(statsSnapshot.readingMinutes) : '...' }}</strong>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">حجم الملف</span>
+              <strong>{{ statsSnapshot.fileSize ? formatFileSize(statsSnapshot.fileSize) : '...' }}</strong>
+            </div>
+          </div>
+        </div>
 
         <div v-if="chatMode" class="chat-area" style="height: 600px; padding: 0;">
           <ChatInterface 
@@ -180,6 +219,11 @@ export default {
     SampleSummary,
     ChatInterface
   },
+  watch: {
+    lastSessionId() {
+      this.refreshCurrentStats()
+    }
+  },
   data() {
     return {
       file: null,
@@ -196,6 +240,13 @@ export default {
       agentMode: false,
       lastSessionId: null,
       indexStatus: null,
+      history: [],
+      currentStats: {
+        pages: null,
+        words: null,
+        readingMinutes: null,
+        fileSize: null
+      },
       chatMode: false,
       _indexPollTimer: null,
       showToast: false,
@@ -218,12 +269,30 @@ export default {
     structuredSummary() {
       if (!this.summary) return ''
       return this.formatSummaryForDisplay(this.summary)
+    },
+    currentHistoryEntry() {
+      if (!this.lastSessionId) return null
+      return this.history.find(entry => entry.session_id === this.lastSessionId) || null
+    },
+    statsSnapshot() {
+      const entry = this.currentHistoryEntry
+      return {
+        pages: entry?.pages ?? this.currentStats.pages,
+        words: entry?.words ?? this.currentStats.words,
+        readingMinutes: entry?.reading_minutes ?? this.currentStats.readingMinutes,
+        fileSize: entry?.file_size ?? this.currentStats.fileSize
+      }
+    },
+    hasStats() {
+      const stats = this.statsSnapshot
+      return Object.values(stats).some(value => value !== null && value !== undefined)
     }
   },
   mounted() {
     this.theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
     document.documentElement.dataset.theme = this.theme
     this.loadModels()
+    this.loadHistory()
   },
   beforeUnmount() {
     this._clearTimer()
@@ -240,6 +309,27 @@ export default {
         this.model = payload.default || this.models[0] || ''
       } catch (error) {
         console.warn('تعذر تحميل النماذج', error)
+      }
+    },
+    async loadHistory() {
+      try {
+        const response = await fetch(`${this.apiBaseUrl}/sessions`)
+        if (!response.ok) return
+        const payload = await response.json()
+        this.history = payload.sessions || []
+        this.refreshCurrentStats()
+      } catch (error) {
+        console.warn('تعذر تحميل الجلسات', error)
+      }
+    },
+    refreshCurrentStats() {
+      const entry = this.currentHistoryEntry
+      if (!entry) return
+      this.currentStats = {
+        pages: entry.pages ?? this.currentStats.pages,
+        words: entry.words ?? this.currentStats.words,
+        readingMinutes: entry.reading_minutes ?? this.currentStats.readingMinutes,
+        fileSize: entry.file_size ?? this.currentStats.fileSize
       }
     },
     setFile(file) {
@@ -299,6 +389,15 @@ export default {
         if (!sessionId) {
           throw new Error('تعذر بدء جلسة التلخيص')
         }
+
+        this.currentStats = {
+          pages: uploadData.pages ?? null,
+          words: null,
+          readingMinutes: null,
+          fileSize: uploadData.file_size ?? this.file?.size ?? null
+        }
+
+        this.loadHistory()
 
         let url
         if (this.agentMode) {
@@ -575,6 +674,48 @@ export default {
       })
 
       return formatted.join('\n\n')
+    }
+    ,
+    statusLabel(status) {
+      const map = {
+        uploaded: 'تم الرفع',
+        processing: 'قيد المعالجة',
+        ready: 'جاهز',
+        failed: 'فشل'
+      }
+      return map[status] || status
+    },
+    formatFileSize(bytes) {
+      if (!bytes && bytes !== 0) return ''
+      if (bytes < 1024) return `${bytes} بايت`
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} كيلوبايت`
+      return `${(bytes / (1024 * 1024)).toFixed(1)} ميجابايت`
+    },
+    formatReadingMinutes(minutes) {
+      if (!minutes) return ''
+      return minutes <= 1 ? '≈ دقيقة واحدة' : `≈ ${minutes} دقائق`
+    },
+    statusClass(status) {
+      return {
+        ready: 'status-ready',
+        processing: 'status-processing',
+        uploaded: 'status-uploaded',
+        failed: 'status-failed'
+      }[status] || 'status-uploaded'
+    },
+    formatHistoryDate(iso) {
+      if (!iso) return ''
+      try {
+        const date = new Date(iso)
+        return date.toLocaleString('ar-SA', {
+          hour: '2-digit',
+          minute: '2-digit',
+          day: '2-digit',
+          month: 'short'
+        })
+      } catch (e) {
+        return iso
+      }
     }
   }
 }
@@ -950,6 +1091,101 @@ button {
   color: var(--text-soft);
   line-height: 1.7;
   font-size: 0.85rem;
+}
+
+.history-card h3 {
+  margin: 0 0 12px;
+}
+
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.history-name {
+  font-weight: 600;
+}
+
+.history-meta {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.history-meta.stats-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.history-status {
+  font-size: 0.75rem;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.history-status.status-ready {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.45);
+  color: #12824d;
+}
+
+.history-status.status-processing,
+.history-status.status-uploaded {
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--accent);
+}
+
+.history-status.status-failed {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.stats-card {
+  margin: 16px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 22px;
+  background: var(--surface);
+}
+
+.stats-card h3 {
+  margin: 0 0 12px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 14px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-alt);
+}
+
+.stat-label {
+  color: var(--text-soft);
+  font-size: 0.78rem;
 }
 
 .conversation {

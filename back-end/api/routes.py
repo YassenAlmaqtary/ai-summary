@@ -19,7 +19,8 @@ from application.dependencies import (
     get_session_repository,
     get_index_status_repository,
     get_vector_store_repository,
-    get_agent_service
+    get_agent_service,
+    get_history_use_case,
 )
 from application.use_cases import PDFExtractionUseCase
 from domain.entities import Session, IndexStatus
@@ -97,11 +98,30 @@ async def upload_pdf(file: UploadFile):
                 detail=f"Server I/O error during file save: {type(e).__name__}: {str(e)}"
             )
         
+        # Compute quick stats (pages)
+        pages = None
+        try:
+            import pypdfium2
+            pdf_doc = pypdfium2.PdfDocument(str(pdf_path))
+            pages = len(pdf_doc)
+        except Exception as e:
+            log.debug(f"Unable to read PDF for stats: {e}")
+        
         # Start extraction in background
         try:
             use_case = get_pdf_extraction_use_case()
             vector_repo = get_vector_store_repository()
             index_status_repo = get_index_status_repository()
+            history_use_case = get_history_use_case()
+
+            await history_use_case.record_upload(
+                session_id=session_id,
+                filename=file.filename or "ملف بدون اسم",
+                model=None,
+                agent_mode=False,
+                pages=pages,
+                file_size=len(data),
+            )
             
             task = asyncio.create_task(
                 use_case.extract_and_store(session_id, pdf_path, vector_repo, index_status_repo)
@@ -122,7 +142,7 @@ async def upload_pdf(file: UploadFile):
         _cleanup_old_files()
         log.info(f"Accepted upload session={session_id} size={len(data)/1024:.2f}KB")
         
-        return {"session_id": session_id, "characters": 0}
+        return {"session_id": session_id, "characters": 0, "pages": pages, "file_size": len(data)}
     except HTTPException:
         raise
     except Exception as e:
@@ -279,4 +299,12 @@ async def clear_chat_memory(session_id: str):
     if agent:
         agent.clear_memory(session_id)
     return JSONResponse({"cleared": True})
+
+
+@router.get("/sessions")
+async def list_sessions(limit: int = Query(10, ge=1, le=50)):
+    """List recent session history entries"""
+    history_use_case = get_history_use_case()
+    sessions = await history_use_case.list_history(limit=limit)
+    return {"sessions": sessions}
 

@@ -5,16 +5,18 @@ Application Layer - Use Cases
 import asyncio
 import hashlib
 import logging
+import math
 from typing import AsyncIterator, Optional
 from pathlib import Path
 from datetime import datetime
 
-from domain.entities import Session, IndexStatus
+from domain.entities import Session, IndexStatus, SessionHistory
 from domain.repositories import (
     SessionRepository,
     CacheRepository,
     VectorStoreRepository,
-    IndexStatusRepository
+    IndexStatusRepository,
+    SessionHistoryRepository,
 )
 from core.infra import get_genai_client
 from ai.agent import build_lesson_prompt, stream_agent_response
@@ -27,8 +29,9 @@ log = logging.getLogger("ai-summary.use_cases")
 class PDFExtractionUseCase:
     """Use case for extracting text from PDF files"""
     
-    def __init__(self, session_repo: SessionRepository):
+    def __init__(self, session_repo: SessionRepository, history_repo: SessionHistoryRepository | None = None):
         self.session_repo = session_repo
+        self.history_repo = history_repo
     
     async def extract_text(self, pdf_path: Path) -> str:
         """Extract text from PDF file"""
@@ -62,6 +65,8 @@ class PDFExtractionUseCase:
                 extracted=True
             )
             await self.session_repo.save(session)
+            if self.history_repo:
+                await self.history_repo.update_status(session_id, "processing")
             
             log.info(f"Extracted text for {session_id} (chars={len(text or '')})")
             
@@ -80,6 +85,8 @@ class PDFExtractionUseCase:
                 extracted=False
             )
             await self.session_repo.save(session)
+            if self.history_repo:
+                await self.history_repo.update_status(session_id, "failed")
     
     async def _build_index_background(
         self,
@@ -108,6 +115,16 @@ class PDFExtractionUseCase:
             # Mark as ready
             status.status = "ready"
             await index_status_repo.set(status)
+            if self.history_repo:
+                words = len(text.split())
+                reading_minutes = math.ceil(words / 200) if words else None
+                await self.history_repo.update_status(
+                    session_id,
+                    "ready",
+                    characters=len(text),
+                    words=words,
+                    reading_minutes=reading_minutes,
+                )
             
             log.info(f"Index built successfully for {session_id}")
         except Exception as e:
@@ -118,6 +135,8 @@ class PDFExtractionUseCase:
                 error=str(e)
             )
             await index_status_repo.set(status)
+            if self.history_repo:
+                await self.history_repo.update_status(session_id, "failed")
 
 
 class SummaryUseCase:
@@ -318,4 +337,71 @@ class ChatAgentUseCase:
             core_text=core_text
         ):
             yield token
+
+
+class SessionHistoryUseCase:
+    """Use case for session history management."""
+
+    def __init__(self, history_repo: SessionHistoryRepository):
+        self.history_repo = history_repo
+
+    async def record_upload(
+        self,
+        session_id: str,
+        filename: str,
+        model: Optional[str] = None,
+        agent_mode: bool = False,
+        pages: Optional[int] = None,
+        file_size: Optional[int] = None,
+    ) -> None:
+        entry = SessionHistory(
+            session_id=session_id,
+            filename=filename,
+            uploaded_at=datetime.utcnow(),
+            status="uploaded",
+            model=model,
+            agent_mode=agent_mode,
+            characters=None,
+            pages=pages,
+            file_size=file_size,
+        )
+        await self.history_repo.upsert(entry)
+
+    async def list_history(self, limit: int = 20) -> list[dict]:
+        entries = await self.history_repo.list_recent(limit)
+        return [
+            {
+                "session_id": entry.session_id,
+                "filename": entry.filename,
+                "uploaded_at": entry.uploaded_at.isoformat(),
+                "status": entry.status,
+                "model": entry.model,
+                "agent_mode": entry.agent_mode,
+                "characters": entry.characters,
+                "pages": entry.pages,
+                "words": entry.words,
+                "reading_minutes": entry.reading_minutes,
+                "file_size": entry.file_size,
+            }
+            for entry in entries
+        ]
+
+    async def update_status(
+        self,
+        session_id: str,
+        status: str,
+        *,
+        characters: Optional[int] = None,
+        pages: Optional[int] = None,
+        words: Optional[int] = None,
+        reading_minutes: Optional[int] = None,
+    ) -> None:
+        await self.history_repo.update_status(
+            session_id,
+            status,
+            characters=characters,
+            pages=pages,
+            words=words,
+            reading_minutes=reading_minutes,
+        )
 
